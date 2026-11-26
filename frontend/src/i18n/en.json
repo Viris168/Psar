@@ -1,0 +1,8 @@
+{
+  "app": { "name": "Psar" },
+  "nav": { "home": "Home", "login": "Log in", "admin": "Admin", "cart": "Cart" },
+  "home": { "title": "Welcome to Psar", "subtitle": "Shop online with delivery in Phnom Penh and to every province." },
+  "auth": { "loginTitle": "Log in", "comingSoon": "Login arrives in Phase 1." },
+  "admin": { "dashboard": "Dashboard", "comingSoon": "Admin pages arrive from Phase 2." },
+  "common": { "notFound": "Page not found", "backHome": "Back to home" }
+}
