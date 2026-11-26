@@ -1,5 +1,7 @@
 package com.psar.common.security;
 
+import com.psar.common.handler.SecurityErrorHandler;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,6 +24,7 @@ import java.util.List;
  */
 @Configuration
 @EnableMethodSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
 
     private static final String[] PUBLIC_PATHS = {
@@ -33,6 +36,8 @@ public class SecurityConfig {
             "/swagger-ui/**",
             "/swagger-ui.html"
     };
+
+    private final SecurityErrorHandler securityErrorHandler;
 
     @Value("${app.cors.allowed-origins}")
     private List<String> allowedOrigins;
@@ -47,6 +52,9 @@ public class SecurityConfig {
                         .requestMatchers(PUBLIC_PATHS).permitAll()
                         .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "MANAGER", "STAFF")
                         .anyRequest().authenticated())
+                .exceptionHandling(e -> e
+                        .authenticationEntryPoint(securityErrorHandler)
+                        .accessDeniedHandler(securityErrorHandler))
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .build();
