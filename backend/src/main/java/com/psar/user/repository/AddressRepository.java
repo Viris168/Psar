@@ -22,6 +22,9 @@ public interface AddressRepository extends JpaRepository<Address, Long> {
 
     long countByUserId(Long userId);
 
+    /** The newest remaining address: becomes the default when the default one is deleted. */
+    Optional<Address> findFirstByUserIdOrderByCreatedAtDescIdDesc(Long userId);
+
     /** Call before marking another address as default (DB allows one default per user). */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update Address a set a.defaultAddress = false where a.user.id = :userId and a.defaultAddress = true")
