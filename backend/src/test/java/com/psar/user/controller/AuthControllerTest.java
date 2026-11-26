@@ -22,7 +22,14 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -77,6 +84,17 @@ class AuthControllerTest extends IntegrationTest {
         register(email.toUpperCase())
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("EMAIL_ALREADY_EXISTS"));
+    }
+
+    @Test
+    void register_concurrentSameEmail_exactlyOneSucceedsRestConflict() throws Exception {
+        String email = uniqueEmail();
+
+        List<Integer> statuses = concurrently(5, () -> register(email).andReturn().getResponse().getStatus());
+
+        assertThat(statuses).containsOnlyOnce(201);
+        assertThat(statuses).filteredOn(s -> s != 201).containsOnly(409);
+        assertThat(userRepository.findByEmail(email)).isPresent();
     }
 
     @Test
@@ -173,6 +191,16 @@ class AuthControllerTest extends IntegrationTest {
         assertRevoked(sessionB);
         assertRevoked(sessionA2);
         refresh(sessionA2).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void refresh_concurrentSameToken_exactlyOneSucceeds() throws Exception {
+        String refreshToken = body(register(uniqueEmail())).get("refreshToken").asText();
+
+        List<Integer> statuses = concurrently(5, () -> refresh(refreshToken).andReturn().getResponse().getStatus());
+
+        assertThat(statuses).containsOnlyOnce(200);
+        assertThat(statuses).filteredOn(s -> s != 200).containsOnly(401);
     }
 
     @Test
@@ -313,6 +341,29 @@ class AuthControllerTest extends IntegrationTest {
     }
 
     // ---------- helpers ----------
+
+    /** Runs the same call from several threads released at once; returns each result. */
+    private static <T> List<T> concurrently(int threads, Callable<T> call) throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<T>> futures = new ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                futures.add(pool.submit(() -> {
+                    start.await();
+                    return call.call();
+                }));
+            }
+            start.countDown();
+            List<T> results = new ArrayList<>();
+            for (Future<T> f : futures) {
+                results.add(f.get());
+            }
+            return results;
+        } finally {
+            pool.shutdownNow();
+        }
+    }
 
     private static String uniqueEmail() {
         return "auth-" + UUID.randomUUID() + "@test.local";

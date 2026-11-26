@@ -91,6 +91,8 @@ public class AuthService {
      * Rotation: the presented token is revoked and a new pair is issued. Presenting an
      * already-revoked token means it was stolen or replayed: every token of that user is
      * revoked (kept on rollback via noRollbackFor) and the call fails with 401.
+     * Losing a race to a concurrent refresh of the same token (e.g. two tabs) only fails
+     * this call, so the winner's new session survives.
      */
     @Transactional(noRollbackFor = UnauthorizedException.class)
     public AuthResponse refresh(RefreshTokenRequest request) {
@@ -98,8 +100,11 @@ public class AuthService {
                 .orElseThrow(UnauthorizedException::invalidToken);
         User user = token.getUser();
 
-        if (token.isRevoked() || refreshTokenRepository.revokeIfActive(token.getId()) == 0) {
+        if (token.isRevoked()) {
             refreshTokenRepository.revokeAllByUserId(user.getId());
+            throw UnauthorizedException.invalidToken();
+        }
+        if (refreshTokenRepository.revokeIfActive(token.getId()) == 0) {
             throw UnauthorizedException.invalidToken();
         }
         if (token.getExpiresAt().isBefore(Instant.now())) {
