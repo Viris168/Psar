@@ -51,7 +51,8 @@ public class PurchaseOrder extends BaseEntity {
     @Column(name = "note", columnDefinition = "TEXT")
     private String note;
 
-    @Column(name = "created_by", updatable = false)
+    /** User id of the manager who created it. Required. */
+    @Column(name = "created_by", nullable = false, updatable = false)
     private Long createdBy;
 
     @Column(name = "received_at")

@@ -41,11 +41,12 @@ CREATE TABLE products (
     description  TEXT,
     category_id  BIGINT          NOT NULL REFERENCES categories (id),
     supplier_id  BIGINT          REFERENCES suppliers (id),
-    cost_price   NUMERIC(12, 2)  NOT NULL DEFAULT 0 CHECK (cost_price >= 0),
+    -- no default: the cost must be entered, so profit reports are honest
+    cost_price   NUMERIC(12, 2)  NOT NULL CHECK (cost_price >= 0),
     sell_price   NUMERIC(12, 2)  NOT NULL CHECK (sell_price > 0),
     -- changed only by atomic UPDATEs from inventory's StockService; never below zero
     quantity     INT             NOT NULL DEFAULT 0 CHECK (quantity >= 0),
-    min_stock    INT             NOT NULL DEFAULT 0 CHECK (min_stock >= 0),
+    min_stock    INT             NOT NULL DEFAULT 10 CHECK (min_stock >= 0),
     unit         VARCHAR(20)     NOT NULL DEFAULT 'pcs',
     is_active    BOOLEAN         NOT NULL DEFAULT TRUE,
     created_at   TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
@@ -103,7 +104,7 @@ CREATE TABLE purchase_orders (
                   CHECK (status IN ('PENDING', 'RECEIVED', 'CANCELLED')),
     total_amount  NUMERIC(12, 2)  NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
     note          TEXT,
-    created_by    BIGINT          REFERENCES users (id),
+    created_by    BIGINT          NOT NULL REFERENCES users (id),
     received_at   TIMESTAMPTZ,
     cancelled_at  TIMESTAMPTZ,
     created_at    TIMESTAMPTZ     NOT NULL DEFAULT NOW(),

@@ -49,9 +49,9 @@ public class Product extends BaseEntity {
     @Column(name = "supplier_id")
     private Long supplierId;
 
-    /** Never returned to customers. */
+    /** Required (no default). Never returned to customers. */
     @Column(name = "cost_price", nullable = false, precision = 12, scale = 2)
-    private BigDecimal costPrice = BigDecimal.ZERO.setScale(2);
+    private BigDecimal costPrice;
 
     @Column(name = "sell_price", nullable = false, precision = 12, scale = 2)
     private BigDecimal sellPrice;
@@ -67,7 +67,7 @@ public class Product extends BaseEntity {
     private int quantity;
 
     @Column(name = "min_stock", nullable = false)
-    private int minStock = 0;
+    private int minStock = 10;
 
     @Column(name = "unit", nullable = false, length = 20)
     private String unit = "pcs";

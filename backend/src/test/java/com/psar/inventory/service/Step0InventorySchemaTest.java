@@ -4,6 +4,7 @@ import com.psar.catalog.entity.Category;
 import com.psar.catalog.entity.Product;
 import com.psar.catalog.entity.ProductImage;
 import com.psar.catalog.repository.ProductImageRepository;
+import com.psar.catalog.repository.ProductRepository;
 import com.psar.common.exception.BusinessRuleException;
 import com.psar.inventory.entity.PurchaseOrder;
 import com.psar.inventory.entity.PurchaseOrderItem;
@@ -41,13 +42,18 @@ class Step0InventorySchemaTest extends IntegrationTest {
     @Autowired
     private ProductImageRepository productImageRepository;
 
+    @Autowired
+    private ProductRepository productRepository;
+
     @Test
     void savePurchaseOrder_generatesSequentialPoNumberAndSavesItems() {
         Supplier supplier = fixtures.supplier("Lucky Wholesale");
         Product product = fixtures.product(fixtures.category("PO tests"), "Noodles", "0.40", 0, 0);
 
-        PurchaseOrder first = purchaseOrderRepository.save(purchaseOrder(supplier, product));
-        PurchaseOrder second = purchaseOrderRepository.save(purchaseOrder(supplier, product));
+        Long managerId = fixtures.manager().getId();
+
+        PurchaseOrder first = purchaseOrderRepository.save(purchaseOrder(supplier, product, managerId));
+        PurchaseOrder second = purchaseOrderRepository.save(purchaseOrder(supplier, product, managerId));
 
         assertThat(first.getPoNo()).matches("PO-\\d{6}");
         assertThat(Integer.parseInt(second.getPoNo().substring(3)))
@@ -95,9 +101,45 @@ class Step0InventorySchemaTest extends IntegrationTest {
         assertThat(summaries.get(supplier.getId()).publicId()).isEqualTo(supplier.getPublicId());
     }
 
-    private static PurchaseOrder purchaseOrder(Supplier supplier, Product product) {
+    @Test
+    void savePurchaseOrder_withoutCreatedBy_rejectedByDatabase() {
+        Supplier supplier = fixtures.supplier("Anonymous PO Supplier");
+        Product product = fixtures.product(fixtures.category("PO tests"), "Sugar", "1.10", 0, 0);
+
+        assertThatThrownBy(() -> purchaseOrderRepository.saveAndFlush(purchaseOrder(supplier, product, null)))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void saveProduct_minStockNotSet_defaultsToTen() {
+        Product product = new Product();
+        product.setSku("SKU-DEF-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+        product.setName("Default min stock");
+        product.setSlug("default-min-stock-" + UUID.randomUUID().toString().substring(0, 8));
+        product.setCategory(fixtures.category("Default tests"));
+        product.setSellPrice(new BigDecimal("1.00"));
+        product.setCostPrice(new BigDecimal("0.60"));
+
+        assertThat(productRepository.saveAndFlush(product).getMinStock()).isEqualTo(10);
+    }
+
+    @Test
+    void saveProduct_withoutCostPrice_rejected() {
+        Product product = new Product();
+        product.setSku("SKU-NOCOST-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+        product.setName("No cost");
+        product.setSlug("no-cost-" + UUID.randomUUID().toString().substring(0, 8));
+        product.setCategory(fixtures.category("Cost tests"));
+        product.setSellPrice(new BigDecimal("1.00"));
+
+        assertThatThrownBy(() -> productRepository.saveAndFlush(product))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    private static PurchaseOrder purchaseOrder(Supplier supplier, Product product, Long createdBy) {
         PurchaseOrder po = new PurchaseOrder();
         po.setSupplier(supplier);
+        po.setCreatedBy(createdBy);
         PurchaseOrderItem item = new PurchaseOrderItem();
         item.setProductId(product.getId());
         item.setQuantity(10);

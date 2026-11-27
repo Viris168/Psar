@@ -6,6 +6,9 @@ import com.psar.catalog.repository.CategoryRepository;
 import com.psar.catalog.repository.ProductRepository;
 import com.psar.inventory.entity.Supplier;
 import com.psar.inventory.repository.SupplierRepository;
+import com.psar.user.entity.Role;
+import com.psar.user.entity.User;
+import com.psar.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.test.context.TestComponent;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +31,7 @@ public class CatalogFixtures {
     private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
     private final SupplierRepository supplierRepository;
+    private final UserRepository userRepository;
 
     public Category category(String name) {
         return category(name, null);
@@ -63,6 +67,15 @@ public class CatalogFixtures {
             productRepository.increaseQuantity(product.getId(), quantity);
         }
         return productRepository.findById(product.getId()).orElseThrow();
+    }
+
+    /** A MANAGER account, e.g. for purchase_orders.created_by / stock_movements.created_by. */
+    public User manager() {
+        User user = new User();
+        user.setEmail("manager-" + shortId() + "@test.local");
+        user.setPasswordHash("not-used");
+        user.setRole(Role.MANAGER);
+        return userRepository.save(user);
     }
 
     /** Current quantity straight from the DB. */
