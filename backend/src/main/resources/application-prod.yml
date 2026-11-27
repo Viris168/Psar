@@ -10,6 +10,12 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
   jwt:
     secret: ${JWT_SECRET}
+  storage:
+    endpoint: ${STORAGE_ENDPOINT}
+    bucket: ${STORAGE_BUCKET}
+    access-key: ${STORAGE_ACCESS_KEY}
+    secret-key: ${STORAGE_SECRET_KEY}
+    public-url: ${STORAGE_PUBLIC_URL}
 
 springdoc:
   swagger-ui:

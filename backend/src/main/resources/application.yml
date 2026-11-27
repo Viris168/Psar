@@ -41,6 +41,10 @@ app:
     bucket: ${STORAGE_BUCKET:psar}
     access-key: ${STORAGE_ACCESS_KEY:minioadmin}
     secret-key: ${STORAGE_SECRET_KEY:minioadmin}
+    region: ${STORAGE_REGION:us-east-1}       # "auto" for Cloudflare R2
+    # base URL that clients load files from (bucket URL or CDN), file URL = public-url + "/" + key
+    public-url: ${STORAGE_PUBLIC_URL:${app.storage.endpoint}/${app.storage.bucket}}
+    create-bucket: false                      # dev only: create the bucket (public read) on startup
 
 management:
   endpoints:
