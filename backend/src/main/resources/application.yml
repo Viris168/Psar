@@ -36,6 +36,19 @@ app:
     refresh-token-ttl: P7D
   order:
     payment-timeout: PT15M
+  shop:
+    # Where CITY deliveries start; the fee depends on the distance from here (default: Phnom Penh centre)
+    latitude: ${SHOP_LATITUDE:11.5564}
+    longitude: ${SHOP_LONGITUDE:104.9282}
+  delivery:
+    # CITY fee bands: the first band whose max-km is above the distance wins (max-km is exclusive);
+    # the last band has no max-km. PROVINCE uses the delivery company's base fee.
+    city-bands:
+      - max-km: 5
+        fee: 1.00
+      - max-km: 15
+        fee: 2.00
+      - fee: 3.00
   scheduling:
     enabled: ${SCHEDULING_ENABLED:true}   # @Scheduled jobs (with ShedLock); off in tests
   storage:
