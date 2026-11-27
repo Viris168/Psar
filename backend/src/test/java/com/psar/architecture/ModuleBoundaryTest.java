@@ -3,11 +3,13 @@ package com.psar.architecture;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.Test;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 /**
@@ -15,6 +17,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
  *  - a module never uses another module's repositories or entities
  *  - controllers never use repositories directly
  *  - pure pricing logic does not depend on Spring or repositories
+ *  - ShedLock-locked jobs return void (ShedLock refuses to lock other methods at runtime)
  */
 class ModuleBoundaryTest {
 
@@ -79,6 +82,15 @@ class ModuleBoundaryTest {
                 .and().doNotHaveFullyQualifiedName("com.psar.catalog.service.ProductStockService")
                 .should().dependOnClassesThat().haveFullyQualifiedName("com.psar.catalog.service.ProductStockService")
                 .because("every stock change must write a stock_movements row, which StockService does")
+                .check(classes);
+    }
+
+    @Test
+    void lockedJobsReturnVoid() {
+        methods()
+                .that().areAnnotatedWith(SchedulerLock.class)
+                .should().haveRawReturnType(void.class)
+                .because("ShedLock throws LockingNotSupportedException on every run of a method returning a value")
                 .check(classes);
     }
 }

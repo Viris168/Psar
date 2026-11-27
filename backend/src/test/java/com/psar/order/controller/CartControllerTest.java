@@ -15,7 +15,15 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -142,6 +150,30 @@ class CartControllerTest extends IntegrationTest {
     }
 
     @Test
+    void addToCart_parallelAddsToNewCart_allSucceedAndAddUp() throws Exception {
+        Product product = fixtures.product(fixtures.category("Cart race new"), "Rice", "1.00", 50, 0);
+        User customer = orders.customer();
+
+        assertThat(addInParallel(customer, product, 10)).containsOnly(200);
+
+        mockMvc.perform(get("/api/cart").with(TestAuth.as(customer)))
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.totalQuantity").value(10));
+    }
+
+    @Test
+    void addToCart_parallelAddsToExistingLine_noLostUpdates() throws Exception {
+        Product product = fixtures.product(fixtures.category("Cart race line"), "Salt", "0.50", 50, 0);
+        User customer = orders.customer();
+        add(customer, product, 1).andExpect(status().isOk());
+
+        assertThat(addInParallel(customer, product, 10)).containsOnly(200);
+
+        mockMvc.perform(get("/api/cart").with(TestAuth.as(customer)))
+                .andExpect(jsonPath("$.totalQuantity").value(11));
+    }
+
+    @Test
     void cart_staffUser_returns403() throws Exception {
         mockMvc.perform(get("/api/cart").with(TestAuth.asRole(1L, "STAFF")))
                 .andExpect(status().isForbidden());
@@ -151,6 +183,30 @@ class CartControllerTest extends IntegrationTest {
         return mockMvc.perform(post("/api/cart/items").with(TestAuth.as(customer))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json(Map.of("productPublicId", product.getPublicId(), "quantity", quantity))));
+    }
+
+    /** Sends {@code times} "add 1" requests for the same customer at once; returns their HTTP statuses. */
+    private List<Integer> addInParallel(User customer, Product product, int times) throws Exception {
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(times);
+        try {
+            List<Future<Integer>> results = new ArrayList<>();
+            for (int i = 0; i < times; i++) {
+                Callable<Integer> task = () -> {
+                    start.await();
+                    return add(customer, product, 1).andReturn().getResponse().getStatus();
+                };
+                results.add(pool.submit(task));
+            }
+            start.countDown();
+            List<Integer> statuses = new ArrayList<>();
+            for (Future<Integer> result : results) {
+                statuses.add(result.get(60, TimeUnit.SECONDS));
+            }
+            return statuses;
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     private JsonNode body(ResultActions result) throws Exception {
