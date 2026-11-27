@@ -26,6 +26,7 @@
         <archunit.version>1.4.1</archunit.version>
         <!-- 1.21.4+ negotiates Docker API version; 1.21.3 (Boot default) fails on Docker Engine 29+ -->
         <testcontainers.version>1.21.4</testcontainers.version>
+        <cloudinary.version>2.6.0</cloudinary.version>
     </properties>
 
     <dependencies>
@@ -90,6 +91,13 @@
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
             <version>${springdoc.version}</version>
+        </dependency>
+
+        <!-- File storage: Cloudinary (product images; later avatars, logos, documents) -->
+        <dependency>
+            <groupId>com.cloudinary</groupId>
+            <artifactId>cloudinary-http5</artifactId>
+            <version>${cloudinary.version}</version>
         </dependency>
 
         <!-- Boilerplate & mapping -->

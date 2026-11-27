@@ -10,6 +10,9 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
   jwt:
     secret: ${JWT_SECRET}
+  storage:
+    cloudinary-url: ${CLOUDINARY_URL}
+    folder: ${STORAGE_FOLDER:psar}
 
 springdoc:
   swagger-ui:

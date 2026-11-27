@@ -185,12 +185,12 @@ Reading another agent's repository inside the same module is fine (e.g. A reads
 ## Agent B — Images, storage & suppliers
 
 ### Build
-- **`pom.xml`**: AWS SDK v2 `s3` (works with MinIO locally and R2/S3 in production) and
-  `org.testcontainers:minio` (test scope).
+- **`pom.xml`**: Cloudinary Java SDK (`com.cloudinary:cloudinary-http5`).
 - **`common/storage/StorageService`** (in `common`: avatars, delivery logos and AI documents will reuse it):
   `StoredFile upload(String folder, MultipartFile file)` → `{key, url}`; `void delete(String key)`.
-  Config from the existing `app.storage.*` keys; path-style access for MinIO; create the bucket on
-  startup if missing (dev only). Keys like `products/{uuid}.webp` — never the user's file name.
+  Files go to Cloudinary through a `FileStore` (`CloudinaryFileStore`); config `app.storage.cloudinary-url`
+  (`CLOUDINARY_URL`) and `app.storage.folder` (root folder: `psar-dev` / `psar`). The key is the Cloudinary
+  public ID, e.g. `psar/products/{uuid}` — never the user's file name.
 - **Upload validation**: JPEG / PNG / WebP only, checked by **file signature (magic bytes)**, not the
   `Content-Type` header → 415 `UNSUPPORTED_MEDIA_TYPE`; max 5 MB → 413 `PAYLOAD_TOO_LARGE`.
 - **`ProductImageService`**: first image becomes main; one main per product; max 10 images (422);
@@ -199,7 +199,8 @@ Reading another agent's repository inside the same module is fine (e.g. A reads
   pointing to a deleted file.
 - **`SupplierService`** (keep the Step 0 methods): list (`q`, `active`), get, create, update,
   soft delete (refuse while it has PENDING purchase orders → 422; read `PurchaseOrderRepository`).
-- **`TestcontainersConfiguration`**: add a MinIO container + properties so integration tests use real S3 calls.
+- **`TestcontainersConfiguration`**: an in-memory `FileStore` (`@Primary`), since Cloudinary has no local
+  emulator — integration tests never call Cloudinary.
 
 ### Endpoints
 | Method | Path | Auth |
@@ -214,7 +215,7 @@ Reading another agent's repository inside the same module is fine (e.g. A reads
 | POST / PUT / DELETE | `/api/admin/suppliers[/{publicId}]` | write |
 
 ### Tests (at least)
-- `uploadImage_firstImage_becomesMainAndFileIsInBucket`
+- `uploadImage_firstImage_becomesMainAndFileIsStored`
 - `uploadImage_pngRenamedToTxtOrTextAsJpeg_returns415` (signature check)
 - `uploadImage_over5Mb_returns413`, `uploadImage_eleventh_returns422`
 - `deleteImage_main_promotesNextAndRemovesFile`

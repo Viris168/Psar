@@ -16,7 +16,7 @@ Solo portfolio project built phase by phase. Read before large changes:
 ```
 /backend     Spring Boot 3, Java 21, Maven — modular monolith (package com.psar)
 /frontend    React + TypeScript + Vite, Tailwind, shadcn/ui
-/docker-compose.yml   postgres (pgvector), rabbitmq, minio, backend, frontend
+/docker-compose.yml   postgres (pgvector), rabbitmq, backend, frontend (files: Cloudinary)
 ```
 
 Backend modules: `user, delivery, catalog, inventory, order, payment, promotion, loyalty, subscription, notification, audit, ai, messaging, common`.
@@ -26,7 +26,7 @@ Each module uses: `controller/ service/ repository/ entity/ dto/(request|respons
 
 ```bash
 # Infrastructure
-docker compose up -d postgres rabbitmq minio
+docker compose up -d postgres rabbitmq
 docker compose down -v                 # reset local data (dev only)
 
 # Backend

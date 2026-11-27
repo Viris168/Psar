@@ -37,10 +37,10 @@ app:
   order:
     payment-timeout: PT15M
   storage:
-    endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
-    bucket: ${STORAGE_BUCKET:psar}
-    access-key: ${STORAGE_ACCESS_KEY:minioadmin}
-    secret-key: ${STORAGE_SECRET_KEY:minioadmin}
+    # cloudinary://<api-key>:<api-secret>@<cloud-name> (Cloudinary console → API Keys). Empty: the app
+    # still starts, only uploads fail.
+    cloudinary-url: ${CLOUDINARY_URL:}
+    folder: ${STORAGE_FOLDER:psar-dev}         # root folder in Cloudinary, so dev and prod files stay apart
 
 management:
   endpoints:
