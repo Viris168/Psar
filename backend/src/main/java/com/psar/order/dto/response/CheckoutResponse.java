@@ -3,6 +3,7 @@ package com.psar.order.dto.response;
 import com.psar.order.entity.DeliveryType;
 import com.psar.order.entity.OrderStatus;
 import com.psar.order.entity.PaymentMethod;
+import com.psar.payment.dto.response.CustomerPaymentResponse;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -11,6 +12,7 @@ import java.util.UUID;
 
 /**
  * The order checkout just placed. {@code expiresAt} is set for KHQR orders (pay within 15 minutes), null for COD.
+ * {@code payment} carries the KHQR string to scan straight away (null for COD).
  */
 public record CheckoutResponse(
         UUID publicId,
@@ -27,7 +29,8 @@ public record CheckoutResponse(
         BigDecimal deliveryFee,
         BigDecimal totalAmount,
         Instant expiresAt,
-        Instant createdAt
+        Instant createdAt,
+        CustomerPaymentResponse payment
 ) {
     public CheckoutResponse {
         items = List.copyOf(items);

@@ -161,8 +161,11 @@ public class OrderFixtures {
             order = orderRepository.saveAndFlush(order);
 
             historyRepository.save(OrderStatusHistory.of(order.getId(), status, null, null, now));
+            // a KHQR payment always had a 15-minute QR at checkout, even if the order has moved on since
+            Instant paymentExpiresAt = method == PaymentMethod.KHQR && order.getExpiresAt() == null
+                    ? now.plus(Duration.ofMinutes(15)) : order.getExpiresAt();
             paymentService.createForOrder(order.getId(), order.getOrderNo(), method.name(), order.getTotalAmount(),
-                    order.getExpiresAt());
+                    paymentExpiresAt);
 
             Map<Long, Integer> quantities = lines.entrySet().stream()
                     .collect(Collectors.toMap(e -> e.getKey().getId(), Map.Entry::getValue, Integer::sum,
