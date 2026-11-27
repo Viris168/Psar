@@ -33,6 +33,7 @@ import org.springframework.util.StringUtils;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -113,7 +114,12 @@ public class PurchaseOrderService {
     @Transactional
     public PurchaseOrderDetailResponse receive(String poNo, Long userId) {
         PurchaseOrder po = lockPending(poNo, "received");
-        for (PurchaseOrderItem item : po.getItems()) {
+        // each stock UPDATE locks its product row until commit: always lock in product id order, so two
+        // receives (or later a checkout) sharing products can't deadlock
+        List<PurchaseOrderItem> items = po.getItems().stream()
+                .sorted(Comparator.comparing(PurchaseOrderItem::getProductId))
+                .toList();
+        for (PurchaseOrderItem item : items) {
             stockService.receive(item.getProductId(), item.getQuantity(), MovementReason.PURCHASE, po.getId(), userId);
         }
         po.setStatus(PurchaseOrderStatus.RECEIVED);
