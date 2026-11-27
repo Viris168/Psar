@@ -66,14 +66,33 @@ Refund (admin): PAID / PROCESSING → CANCELLED + stock back + payment REFUNDED;
 
 ---
 
-## Step 0 — shared contract (lead, on `main`)
+## Step 0 — shared contract ✅ done (on `main`)
 
-Every agent builds on these files and **must not change them**.
+Already built and tested. Every agent builds on these files and **must not change them**.
+
+**Things to know before you start:**
+- **The SDK needs an expiration timestamp** for a KHQR with an amount (`IndividualInfo.setExpirationTimestamp`,
+  epoch **milliseconds**), else it returns `errorCode=45` "Expiration timestamp is required for dynamic KHQR".
+  Check `getKHQRStatus().getCode() == 0`; the code is in `getData().getQr()`, the md5 in `getData().getMd5()`.
+  The SDK's OkHttp and commons-validator are excluded in `pom.xml` (unused; the latter pulled a vulnerable
+  commons-beanutils) — `Step0PaymentSchemaTest` proves generate + verify still work offline.
+- **Payment classes moved** to `com.psar.payment` (`entity.Payment`, `PaymentStatus`, `PaymentType`, its own
+  `PaymentMethod` copy, `repository.PaymentRepository`). The order module only calls `PaymentService`
+  (`createForOrder`, `cancelPending`, `findForOrder` → `Optional<PaymentView>`); methods cross as strings.
+- **No circular dependency:** `PaymentService` must not depend on order services. `PaymentProcessor` may use
+  `OrderLookupService` (to tell a LATE payment), and tells the order module through `PaymentSucceededEvent`.
+- **Uniqueness:** `(provider, provider_ref)` UNIQUE, `qr_md5` UNIQUE, `transaction_ref` UNIQUE.
+  `PaymentRepository.lockByProviderRef(provider, ref)` (FOR UPDATE), `lockByOrderId`, `findIdsToCheck(...)`.
+- `BakongClient.findPaid(md5)` returns a `GatewayPayment` (transaction ref, amount, currency, paidAt, raw).
+- **Fixtures:** `PaymentFixtures` (bean in every `IntegrationTest`): `khqrOrder(Map<Product, qty>)` — a
+  PENDING_PAYMENT KHQR order whose payment always has a provider ref (a test md5 until Agent A's QR lands),
+  `payment(order)`, `payAtBakong(order)` (the fake Bakong now says "paid", returns the bank ref).
+- Postgres keeps timestamps in **microseconds**: compare `Instant`s read back from the DB with a tolerance.
 
 ### 1. `V5__payments_khqr.sql`
 > Migrations shift again: `architecture.md` planned promotions as V5; they become V6 … reviews V11.
 
-- `payments`: `provider` (`BAKONG_KHQR`), `provider_ref` UNIQUE (KHQR: = `qr_md5`), `redirect_url` NULL,
+- `payments`: `provider` (`BAKONG_KHQR`), `provider_ref` (UNIQUE with `provider`; KHQR: = `qr_md5`), `redirect_url` NULL,
   `qr_md5` UNIQUE, `refund_required` BOOLEAN default false, `refunded_at`, `refund_reason`,
   `refunded_by` → users, `last_checked_at`, `check_attempts` INT default 0. Index `(status, created_at)` exists.
 - `payment_events` (append-only): `id`, `payment_id` NULL → payments, `source` (`CHECK_JOB`/`WEBHOOK`/
@@ -111,7 +130,7 @@ public interface PaymentGateway {
   PayWay transaction id fits in the same columns. `qr_string` stays for KHQR; `redirect_url` is added for hosted
   checkouts like PayWay.
 - **`BakongKhqrGateway`** (Step 0, thin) delegates: `createCharge` → `KhqrService` (Agent A), `checkStatus` →
-  `BakongClient` (Agent B), `parseCallback` → the HMAC webhook format (Agent B).
+  `BakongClient` (Agent B), `parseCallback` → `KhqrWebhookParser` (the HMAC webhook format, Agent B).
 - **`PaymentGateways.forMethod(method)`** picks the gateway. `PaymentService`, the check job and the webhook only
   ever talk to `PaymentGateway`, never to Bakong classes directly.
 - Webhook path is per provider: `POST /api/payments/webhook/{provider}` (`bakong-khqr` now).
@@ -122,7 +141,7 @@ public interface PaymentGateway {
 - `payment.service.confirm.PaymentProcessor.confirm(PaymentConfirmation(source, qrMd5, transactionRef, amount,
   currency, paidAt, payload, signatureValid))` → `PaymentOutcome` — Agent B. Step 0 version: records the event
   as `REJECTED` and changes nothing.
-- `payment.service.bakong.BakongClient.findPaid(String qrMd5)` → `Optional<BakongTransaction>` — interface;
+- `payment.service.bakong.BakongClient.findPaid(String qrMd5)` → `Optional<GatewayPayment>` — interface;
   Step 0 ships **`FakeBakongClient`** (`app.payment.bakong.mode=fake`, the default in dev and tests) that answers
   "paid" for md5s marked with `markPaid(md5, amount)`. Agent B adds the real HTTP client (`mode=bakong`).
 - Config `app.payment.khqr.*` (account id, merchant name / city, currency USD) and `app.payment.bakong.*`
@@ -131,7 +150,7 @@ public interface PaymentGateway {
 - New `NotificationType`s: `ORDER_PAID` (customer), `PAYMENT_LATE` (admins); `AuditEntity.PAYMENT`.
 
 ### 5. Test support
-`PaymentFixtures` (a KHQR order with its payment, mark it paid at the fake Bakong) and `Step0PaymentSchemaTest`.
+`PaymentFixtures` (see above) and `payment/service/Step0PaymentSchemaTest`.
 
 ---
 
@@ -141,7 +160,7 @@ public interface PaymentGateway {
 |---|---|
 | Step 0 files (migration, moved / new entities, repositories, `PaymentService` signatures, events, contracts, `FakeBakongClient`, config classes, fixtures) and the Phase 4 code they change (checkout calling `PaymentService`, workflow calling `cancelPending`) | **lead only** |
 | Body of `KhqrService` (used by `BakongKhqrGateway.createCharge`); `CustomerPaymentController` | Agent A |
-| Body of `PaymentProcessor`; `BakongHttpClient`; the webhook signature check used by `BakongKhqrGateway.parseCallback`; `PaymentCheckJob`; `PaymentWebhookController`; `PaymentSimulationController` | Agent B |
+| Body of `PaymentProcessor`; `BakongHttpClient`; body of `KhqrWebhookParser` (used by `BakongKhqrGateway.parseCallback`); `PaymentCheckJob`; `PaymentWebhookController`; `PaymentSimulationController` | Agent B |
 | `order` listener for `PaymentSucceededEvent`; COD collected at DELIVERED; `RefundService` + endpoints; `AdminPaymentController`; `notification/listener/PaymentNotificationListener` | Agent C |
 | `SecurityConfig` (webhook / simulate paths open), `common/exception/**`, Flyway | **lead only** |
 
@@ -259,7 +278,7 @@ through `StockService`. No `Co-Authored-By` lines. Don't touch Flyway — ask th
 
 ## Done when
 
-- [ ] Step 0 merged
+- [x] Step 0 merged
 - [ ] Agent B merged
 - [ ] Agent C merged
 - [ ] Agent A merged
