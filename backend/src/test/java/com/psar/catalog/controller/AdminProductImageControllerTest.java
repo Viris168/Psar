@@ -122,10 +122,12 @@ class AdminProductImageControllerTest extends IntegrationTest {
         for (int i = 0; i < 10; i++) {
             upload(png("p" + i + ".png")).andExpect(status().isCreated());
         }
+        int storedFiles = files.count();
         upload(png("eleven.png"))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("BUSINESS_RULE"));
         assertThat(imageRepository.countByProductId(product.getId())).isEqualTo(10);
+        assertThat(files.count()).isEqualTo(storedFiles);
     }
 
     @Test

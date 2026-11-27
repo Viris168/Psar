@@ -15,6 +15,8 @@ import java.util.Map;
 @Component
 public class CloudinaryFileStore implements FileStore {
 
+    static final int TIMEOUT_SECONDS = 30;
+
     private final Cloudinary cloudinary;
     private final StorageProperties properties;
 
@@ -25,6 +27,8 @@ public class CloudinaryFileStore implements FileStore {
                 ? new Cloudinary(properties.cloudinaryUrl())
                 : new Cloudinary(Map.of());
         this.cloudinary.config.secure = true;
+        // connect + response timeout, so a hanging Cloudinary fails the request instead of blocking it
+        this.cloudinary.config.timeout = TIMEOUT_SECONDS;
     }
 
     @Override

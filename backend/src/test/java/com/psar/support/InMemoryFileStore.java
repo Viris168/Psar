@@ -26,6 +26,10 @@ public class InMemoryFileStore implements FileStore {
         files.remove(key);
     }
 
+    public int count() {
+        return files.size();
+    }
+
     /** The type of a stored file, empty if there is no file with this key. */
     public Optional<ImageType> typeOf(String key) {
         return Optional.ofNullable(files.get(key));

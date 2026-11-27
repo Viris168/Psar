@@ -13,6 +13,7 @@ import com.psar.common.storage.StoredFile;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashSet;
@@ -38,6 +39,7 @@ public class ProductImageService {
     private final ProductRepository productRepository;
     private final ProductImageMapper imageMapper;
     private final StorageService storageService;
+    private final TransactionTemplate transactionTemplate;
 
     @Transactional(readOnly = true)
     public List<ProductImageResponse> list(UUID productPublicId) {
@@ -46,16 +48,30 @@ public class ProductImageService {
         return imageMapper.toResponses(imageRepository.findAllByProductIdOrderBySortOrderAscIdAsc(productId));
     }
 
-    @Transactional
+    /**
+     * Uploads to storage first, outside any transaction, so a slow upload never holds a DB connection or the
+     * product lock; then saves the row in a short locked transaction. If that fails, the file is deleted again.
+     */
     public ProductImageResponse upload(UUID productPublicId, MultipartFile file) {
+        // unlocked pre-check, so a request that will fail anyway doesn't upload; checked again under the lock
+        Long productId = productRepository.findByPublicId(productPublicId)
+                .orElseThrow(() -> NotFoundException.of("Product")).getId();
+        checkImageLimit(imageRepository.countByProductId(productId));
+
+        // validated (415/413) here
+        StoredFile stored = storageService.upload(FOLDER, file);
+        try {
+            return transactionTemplate.execute(status -> save(productPublicId, stored));
+        } catch (RuntimeException ex) {
+            storageService.deleteAfterCommit(stored.key()); // no transaction here: deletes now, logs a failure
+            throw ex;
+        }
+    }
+
+    private ProductImageResponse save(UUID productPublicId, StoredFile stored) {
         Long productId = lockProduct(productPublicId);
         List<ProductImage> images = imageRepository.findAllByProductIdOrderBySortOrderAscIdAsc(productId);
-        if (images.size() >= MAX_IMAGES) {
-            throw new BusinessRuleException("A product can have at most " + MAX_IMAGES + " images");
-        }
-
-        // validated (415/413) here; removed again from storage if this transaction rolls back
-        StoredFile stored = storageService.upload(FOLDER, file);
+        checkImageLimit(images.size());
 
         ProductImage image = new ProductImage();
         image.setProduct(productRepository.getReferenceById(productId));
@@ -112,6 +128,12 @@ public class ProductImageService {
                     .ifPresent(next -> next.setMain(true));
         }
         storageService.deleteAfterCommit(image.getStorageKey());
+    }
+
+    private static void checkImageLimit(long imageCount) {
+        if (imageCount >= MAX_IMAGES) {
+            throw new BusinessRuleException("A product can have at most " + MAX_IMAGES + " images");
+        }
     }
 
     private Long lockProduct(UUID productPublicId) {
