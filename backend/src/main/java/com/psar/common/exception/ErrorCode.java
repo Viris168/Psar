@@ -34,6 +34,10 @@ public enum ErrorCode {
     // 409
     CONFLICT(HttpStatus.CONFLICT),
     EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT),
+    SKU_ALREADY_EXISTS(HttpStatus.CONFLICT),
+    INSUFFICIENT_STOCK(HttpStatus.CONFLICT),
+    /** e.g. receiving a purchase order that is already received or cancelled. */
+    INVALID_STATUS(HttpStatus.CONFLICT),
 
     // 413
     PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE),

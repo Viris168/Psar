@@ -71,4 +71,14 @@ class ModuleBoundaryTest {
                 .because("pricing must be pure, fast and easy to unit test")
                 .check(classes);
     }
+
+    @Test
+    void onlyStockServiceChangesProductQuantity() {
+        noClasses()
+                .that().doNotHaveFullyQualifiedName("com.psar.inventory.service.StockService")
+                .and().doNotHaveFullyQualifiedName("com.psar.catalog.service.ProductStockService")
+                .should().dependOnClassesThat().haveFullyQualifiedName("com.psar.catalog.service.ProductStockService")
+                .because("every stock change must write a stock_movements row, which StockService does")
+                .check(classes);
+    }
 }
