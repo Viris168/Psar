@@ -189,8 +189,9 @@ class CustomerPaymentControllerTest extends IntegrationTest {
     }
 
     private static void assertNoSecrets(JsonNode payment) {
+        // the payment's own public id is fine (it is how the demo "simulate payment" finds it); md5 / refs are not
         assertThat(payment.fieldNames()).toIterable().containsExactlyInAnyOrder(
-                "status", "method", "amount", "currency", "expiresAt", "qrString", "paidAt");
+                "publicId", "status", "method", "amount", "currency", "expiresAt", "qrString", "paidAt");
     }
 
     private ResultActions getPayment(User customer, Order order) throws Exception {

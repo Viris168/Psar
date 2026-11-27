@@ -279,7 +279,7 @@ through `StockService`. No `Co-Authored-By` lines. Don't touch Flyway — ask th
 ## Done when
 
 - [x] Step 0 merged
-- [ ] Agent B merged
-- [ ] Agent C merged
-- [ ] Agent A merged
-- [ ] End-to-end test passes; `CLAUDE.md` "Current phase" → Phase 5 done (MVP)
+- [x] Agent B merged
+- [x] Agent C merged
+- [x] Agent A merged
+- [x] End-to-end test passes; `CLAUDE.md` "Current phase" → Phase 5 done (MVP)

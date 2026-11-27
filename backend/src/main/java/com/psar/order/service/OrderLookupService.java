@@ -6,6 +6,7 @@ import com.psar.order.entity.Order;
 import com.psar.order.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
@@ -22,6 +23,16 @@ public class OrderLookupService {
     @Transactional(readOnly = true)
     public OrderSummary summary(Long orderId) {
         return toSummary(orderRepository.findById(orderId).orElseThrow(() -> NotFoundException.of("Order")));
+    }
+
+    /**
+     * Locks the order (SELECT … FOR UPDATE) for the rest of the caller's transaction and returns it fresh.
+     * Payment confirmation calls this <b>before</b> locking the payment, the same order (order, then payment)
+     * that cancel, expiry and refund use, so a payment arriving as the order expires can't deadlock.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public OrderSummary lockForPayment(Long orderId) {
+        return toSummary(orderRepository.lockById(orderId).orElseThrow(() -> NotFoundException.of("Order")));
     }
 
     /** The user's own order by its public id; empty if missing or someone else's. */

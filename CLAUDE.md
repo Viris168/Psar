@@ -49,8 +49,8 @@ Swagger UI: `http://localhost:8080/swagger-ui.html` · RabbitMQ UI: `http://loca
 
 > Update this line as work progresses.
 
-**Phase 4 — Cart, checkout & orders: done.** Next: Phase 5 (payments: KHQR, webhook, payment check).
-Open: delivery companies still expose the internal `id` (no `public_id` in V1); image uploads not yet tried against a real Cloudinary account (tests use an in-memory store).
+**Phase 5 — Payments (KHQR, confirmation, refunds): done — MVP.** Next: Phase 6 (promotions). ABA PayWay / cards plug into `PaymentGateway` (own phase, needs a PayWay merchant account).
+Open: delivery companies still expose the internal `id` (no `public_id` in V1); not yet tried against real accounts: Cloudinary uploads, Bakong (`BAKONG_MODE=bakong` + token) — tests use in-memory / fake stand-ins.
 
 Phases: 0 Setup → 1 Users → 2 Catalog & inventory → 3 Audit & notifications → 4 Orders & checkout → 5 Payments (MVP) → 6 Promotions → 7 Points → 8 Subscription → 9 RabbitMQ & jobs → 10 Dashboard → 11 AI chatbot → 12 Tests → 13 Launch.
 Only build what the current phase needs. Do not add tables or features from later phases early.

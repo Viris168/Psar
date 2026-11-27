@@ -85,9 +85,12 @@ public class PaymentSettlementService {
         }
         PaymentStatus before = payment.getStatus();
         markRefunded(payment, reason, actorId);
+        // off the "refund required" to-do list; that it was a late payment stays in payment_events (LATE) and here
+        payment.setRefundRequired(false);
+        paymentRepository.save(payment);
         auditService.recordChanges(AuditEntity.PAYMENT, publicId.toString(),
-                AuditFields.create().put("status", before).put("refundReason", null),
-                AuditFields.create().put("status", PaymentStatus.REFUNDED)
+                AuditFields.create().put("status", before).put("refundRequired", true).put("refundReason", null),
+                AuditFields.create().put("status", PaymentStatus.REFUNDED).put("refundRequired", false)
                         .put("refundReason", payment.getRefundReason()));
     }
 
