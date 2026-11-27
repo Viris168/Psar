@@ -46,6 +46,7 @@ public class CartService {
     /**
      * Adds to the product's line (adding again adds up). Only purchasable products (422); a line holds at most
      * {@value CartItem#MAX_QUANTITY} units and the cart at most {@value #MAX_LINES} lines (422).
+     * The cart row is created if missing and locked, so parallel adds queue up instead of losing updates.
      */
     @Transactional
     public CartResponse add(Long userId, AddCartItemRequest request) {
@@ -53,7 +54,8 @@ public class CartService {
         if (!product.purchasable()) {
             throw new BusinessRuleException(product.name() + " is not available");
         }
-        Cart cart = cartRepository.findByUserId(userId).orElseGet(() -> newCart(userId));
+        cartRepository.createIfMissing(userId);
+        Cart cart = cartRepository.lockByUserId(userId).orElseThrow();
         cart.item(product.id()).ifPresentOrElse(item -> {
             int quantity = item.getQuantity() + request.quantity();
             if (quantity > CartItem.MAX_QUANTITY) {
@@ -74,7 +76,7 @@ public class CartService {
     @Transactional
     public CartResponse setQuantity(Long userId, UUID productPublicId, UpdateCartItemRequest request) {
         Long productId = productCatalogService.sellable(productPublicId).id();
-        Cart cart = cartRepository.findByUserId(userId).orElseThrow(() -> NotFoundException.of("Cart item"));
+        Cart cart = cartRepository.lockByUserId(userId).orElseThrow(() -> NotFoundException.of("Cart item"));
         CartItem item = cart.item(productId).orElseThrow(() -> NotFoundException.of("Cart item"));
         item.setQuantity(request.quantity());
         return toResponse(cartRepository.save(cart));
@@ -84,7 +86,7 @@ public class CartService {
     @Transactional
     public CartResponse remove(Long userId, UUID productPublicId) {
         Long productId = productCatalogService.sellable(productPublicId).id();
-        return cartRepository.findByUserId(userId)
+        return cartRepository.lockByUserId(userId)
                 .map(cart -> {
                     cart.removeItem(productId);
                     return toResponse(cartRepository.save(cart));
@@ -94,16 +96,10 @@ public class CartService {
 
     @Transactional
     public void clear(Long userId) {
-        cartRepository.findByUserId(userId).ifPresent(cart -> {
+        cartRepository.lockByUserId(userId).ifPresent(cart -> {
             cart.clear();
             cartRepository.save(cart);
         });
-    }
-
-    private static Cart newCart(Long userId) {
-        Cart cart = new Cart();
-        cart.setUserId(userId);
-        return cart;
     }
 
     private CartResponse toResponse(Cart cart) {

@@ -27,9 +27,17 @@ public class OrderExpiryJob {
     private final OrderWorkflow workflow;
     private final Clock clock;
 
-    /** Returns how many orders were cancelled (tests call this directly; scheduling is off there). */
+    /**
+     * The scheduled entry point. ShedLock can only lock methods returning void (or an Optional), so the
+     * locked method is this one and the work with its count lives in {@link #expireUnpaidOrders()}.
+     */
     @Scheduled(cron = "0 * * * * *")
     @SchedulerLock(name = "OrderExpiryJob", lockAtMostFor = "PT5M", lockAtLeastFor = "PT10S")
+    public void run() {
+        expireUnpaidOrders();
+    }
+
+    /** Returns how many orders were cancelled (tests call this directly; scheduling is off there). */
     public int expireUnpaidOrders() {
         List<Long> ids = orderRepository.findIdsByStatusAndExpiresAtBefore(OrderStatus.PENDING_PAYMENT,
                 clock.instant());
