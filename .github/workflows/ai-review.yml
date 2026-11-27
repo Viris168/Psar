@@ -172,7 +172,7 @@ jobs:
         if: always()
         env:
           PLATFORM_INGEST_TOKEN: ${{ secrets.PLATFORM_INGEST_TOKEN }}
-          INGEST_URL: https://idol-partnership-cholesterol-reaching.trycloudflare.com/api/ingest/review
+          INGEST_URL: https://show-minnesota-holders-conference.trycloudflare.com/api/ingest/review
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
