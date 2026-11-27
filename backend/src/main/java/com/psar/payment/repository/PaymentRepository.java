@@ -22,6 +22,11 @@ public interface PaymentRepository extends JpaRepository<Payment, Long>, JpaSpec
     Optional<Payment> findByPublicId(UUID publicId);
 
     /** SELECT … FOR UPDATE: confirmation locks the payment first, so two sources can't both apply it. */
+    /** Which order a charge belongs to, without locking (confirmation locks the order first, then the payment). */
+    @Query("select p.orderId from Payment p where p.provider = :provider and p.providerRef = :providerRef")
+    Optional<Long> findOrderIdByProviderRef(@Param("provider") PaymentProvider provider,
+                                            @Param("providerRef") String providerRef);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Payment p where p.provider = :provider and p.providerRef = :providerRef")
     Optional<Payment> lockByProviderRef(@Param("provider") PaymentProvider provider,

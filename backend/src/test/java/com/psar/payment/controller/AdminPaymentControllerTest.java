@@ -103,7 +103,7 @@ class AdminPaymentControllerTest extends IntegrationTest {
         markRefunded(payment.getPublicId(), "Returned by ABA transfer", manager)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REFUNDED"))
-                .andExpect(jsonPath("$.refundRequired").value(true))
+                .andExpect(jsonPath("$.refundRequired").value(false)) // off the to-do list once refunded
                 .andExpect(jsonPath("$.refundReason").value("Returned by ABA transfer"))
                 .andExpect(jsonPath("$.refundedBy.email").value(manager.getEmail()))
                 .andExpect(jsonPath("$.refundedAt").exists());

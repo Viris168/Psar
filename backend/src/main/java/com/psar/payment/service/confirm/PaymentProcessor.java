@@ -1,5 +1,6 @@
 package com.psar.payment.service.confirm;
 
+import com.psar.order.dto.response.OrderSummary;
 import com.psar.order.service.OrderLookupService;
 import com.psar.payment.entity.Payment;
 import com.psar.payment.entity.PaymentEvent;
@@ -22,8 +23,8 @@ import java.util.Optional;
 
 /**
  * The only way a gateway payment becomes SUCCESS (task/task5.md, payment flow): one transaction, payment row
- * locked ({@code SELECT … FOR UPDATE} by provider + provider ref), idempotent, every attempt recorded in
- * payment_events.
+ * locked ({@code SELECT … FOR UPDATE}: the order first, then the payment, like every cancel path), idempotent,
+ * every attempt recorded in payment_events.
  * <ul>
  *   <li>bad signature / no reference / no transaction ref → REJECTED, nothing changed</li>
  *   <li>no payment with this reference → UNKNOWN_PAYMENT</li>
@@ -56,6 +57,10 @@ public class PaymentProcessor {
                 || isBlank(confirmation.providerRef())) {
             return record(confirmation, null, PaymentOutcome.REJECTED);
         }
+        // lock order, then payment: the same order as cancel / expiry / refund, so they never deadlock
+        Optional<Long> orderId = paymentRepository.findOrderIdByProviderRef(confirmation.provider(),
+                confirmation.providerRef());
+        OrderSummary order = orderId.map(orderLookupService::lockForPayment).orElse(null);
         Optional<Payment> locked = paymentRepository.lockByProviderRef(confirmation.provider(),
                 confirmation.providerRef());
         if (locked.isEmpty()) {
@@ -86,7 +91,8 @@ public class PaymentProcessor {
             return record(confirmation, payment, PaymentOutcome.REJECTED);
         }
 
-        boolean late = payment.getStatus() != PaymentStatus.PENDING || !orderAwaitingPayment(payment);
+        boolean late = payment.getStatus() != PaymentStatus.PENDING
+                || (order != null && !AWAITING_PAYMENT.equals(order.status()));
         Instant paidAt = confirmation.paidAt() != null ? confirmation.paidAt() : clock.instant();
         payment.setStatus(PaymentStatus.SUCCESS);
         payment.setTransactionRef(confirmation.transactionRef());
@@ -108,10 +114,6 @@ public class PaymentProcessor {
         return record(confirmation, payment, PaymentOutcome.APPLIED);
     }
 
-    private boolean orderAwaitingPayment(Payment payment) {
-        return payment.getOrderId() == null
-                || AWAITING_PAYMENT.equals(orderLookupService.summary(payment.getOrderId()).status());
-    }
 
     private static boolean sameMoney(Payment payment, PaymentConfirmation confirmation) {
         return confirmation.amount() != null && confirmation.amount().compareTo(payment.getAmount()) == 0
