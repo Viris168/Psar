@@ -237,7 +237,7 @@ Every admin method: `@PreAuthorize("hasRole('ADMIN')")` — `/api/admin/**` alon
 ## Done when
 
 - [x] Step 0 merged
-- [ ] Agent 1 merged
-- [ ] Agent 2 merged
-- [ ] Agent 3 merged
-- [ ] End-to-end test passes; update `CLAUDE.md` "Current phase" to Phase 1 done
+- [x] Agent 1 merged
+- [x] Agent 2 merged
+- [x] Agent 3 merged
+- [x] End-to-end test passes; update `CLAUDE.md` "Current phase" to Phase 1 done

@@ -9,6 +9,8 @@ import java.util.UUID;
 public record UserResponse(
         UUID publicId,
         String email,
+        String fullName,
+        String position,
         Role role,
         boolean active,
         boolean emailVerified,

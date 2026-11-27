@@ -9,7 +9,10 @@ import org.hibernate.validator.constraints.URL;
 
 import java.math.BigDecimal;
 
-/** Admin create/update. */
+/**
+ * Admin create/update. {@code active} is optional: omitted on create = active,
+ * omitted on update = unchanged (MapStruct skips null wrappers for primitive targets).
+ */
 public record DeliveryCompanyRequest(
         @NotBlank @Size(max = 100) String name,
         @URL @Size(max = 255) String logoUrl,
@@ -17,6 +20,6 @@ public record DeliveryCompanyRequest(
         // template, e.g. https://courier.example/track/{trackingNo}
         @Size(max = 255) String trackingUrl,
         @NotNull @DecimalMin("0.00") @Digits(integer = 10, fraction = 2) BigDecimal baseFee,
-        boolean active
+        Boolean active
 ) {
 }

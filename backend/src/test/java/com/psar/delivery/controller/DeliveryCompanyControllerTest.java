@@ -96,6 +96,29 @@ class DeliveryCompanyControllerTest extends IntegrationTest {
     }
 
     @Test
+    void create_withoutActive_createsActiveCompany() throws Exception {
+        Map<String, Object> body = body("No Flag " + shortId(), true);
+        body.remove("active");
+
+        mockMvc.perform(post(ADMIN).with(TestAuth.asRole(1L, "ADMIN"))
+                        .contentType(APPLICATION_JSON).content(json(body)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.active").value(true));
+    }
+
+    @Test
+    void update_withoutActive_keepsCurrentStatus() throws Exception {
+        DeliveryCompany company = save("Paused " + shortId(), false);
+        Map<String, Object> body = body(company.getName(), true);
+        body.remove("active");
+
+        mockMvc.perform(put(ADMIN + "/" + company.getId()).with(TestAuth.asRole(1L, "ADMIN"))
+                        .contentType(APPLICATION_JSON).content(json(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+    }
+
+    @Test
     void create_invalidRequest_returns400() throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("name", "");
