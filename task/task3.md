@@ -204,6 +204,6 @@ Before finishing: `cd backend && ./mvnw test` passes; endpoints look right in Sw
 ## Done when
 
 - [x] Step 0 merged
-- [ ] Agent B merged
-- [ ] Agent A merged
-- [ ] End-to-end test passes; `CLAUDE.md` "Current phase" → Phase 3 done
+- [x] Agent B merged
+- [x] Agent A merged
+- [x] End-to-end test passes; `CLAUDE.md` "Current phase" → Phase 3 done
