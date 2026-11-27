@@ -1,5 +1,8 @@
 package com.psar.catalog.service;
 
+import com.psar.audit.service.AuditEntity;
+import com.psar.audit.service.AuditFields;
+import com.psar.audit.service.AuditService;
 import com.psar.catalog.dto.response.ProductImageResponse;
 import com.psar.catalog.entity.ProductImage;
 import com.psar.catalog.mapper.ProductImageMapper;
@@ -40,6 +43,7 @@ public class ProductImageService {
     private final ProductImageMapper imageMapper;
     private final StorageService storageService;
     private final TransactionTemplate transactionTemplate;
+    private final AuditService auditService;
 
     @Transactional(readOnly = true)
     public List<ProductImageResponse> list(UUID productPublicId) {
@@ -79,7 +83,10 @@ public class ProductImageService {
         image.setStorageKey(stored.key());
         image.setMain(images.isEmpty());
         image.setSortOrder(images.stream().mapToInt(ProductImage::getSortOrder).max().orElse(-1) + 1);
-        return imageMapper.toResponse(imageRepository.save(image));
+        image = imageRepository.save(image);
+        auditService.recordCreate(AuditEntity.PRODUCT_IMAGE, image.getPublicId().toString(),
+                auditFields(productPublicId, image).toMap());
+        return imageMapper.toResponse(image);
     }
 
     @Transactional
@@ -119,6 +126,8 @@ public class ProductImageService {
     public void delete(UUID productPublicId, UUID imagePublicId) {
         Long productId = lockProduct(productPublicId);
         ProductImage image = findImage(imagePublicId, productId);
+        auditService.recordDelete(AuditEntity.PRODUCT_IMAGE, imagePublicId.toString(),
+                auditFields(productPublicId, image).toMap());
         imageRepository.delete(image);
         // Hibernate runs deletes last; flush so the new main doesn't clash with the old one in the unique index
         imageRepository.flush();
@@ -128,6 +137,12 @@ public class ProductImageService {
                     .ifPresent(next -> next.setMain(true));
         }
         storageService.deleteAfterCommit(image.getStorageKey());
+    }
+
+    /** Never the storage key. */
+    private static AuditFields auditFields(UUID productPublicId, ProductImage image) {
+        return AuditFields.create().put("productPublicId", productPublicId).put("imageUrl", image.getImageUrl())
+                .put("main", image.isMain());
     }
 
     private static void checkImageLimit(long imageCount) {

@@ -1,5 +1,8 @@
 package com.psar.delivery.service;
 
+import com.psar.audit.service.AuditEntity;
+import com.psar.audit.service.AuditFields;
+import com.psar.audit.service.AuditService;
 import com.psar.common.exception.BusinessRuleException;
 import com.psar.common.exception.NotFoundException;
 import com.psar.common.web.PageResponse;
@@ -31,6 +34,7 @@ public class DeliveryCompanyService {
 
     private final DeliveryCompanyRepository deliveryCompanyRepository;
     private final DeliveryCompanyMapper deliveryCompanyMapper;
+    private final AuditService auditService;
 
     /** Used when saving a PROVINCE address. Missing and inactive look the same to the caller. */
     @Transactional(readOnly = true)
@@ -61,14 +65,18 @@ public class DeliveryCompanyService {
 
     @Transactional
     public DeliveryCompanyResponse create(DeliveryCompanyRequest request) {
-        DeliveryCompany company = deliveryCompanyMapper.toEntity(request);
-        return deliveryCompanyMapper.toResponse(deliveryCompanyRepository.save(company));
+        DeliveryCompany company = deliveryCompanyRepository.save(deliveryCompanyMapper.toEntity(request));
+        auditService.recordCreate(AuditEntity.DELIVERY_COMPANY, company.getId().toString(),
+                auditFields(company).toMap());
+        return deliveryCompanyMapper.toResponse(company);
     }
 
     @Transactional
     public DeliveryCompanyResponse update(Long id, DeliveryCompanyRequest request) {
         DeliveryCompany company = find(id);
+        AuditFields before = auditFields(company);
         deliveryCompanyMapper.update(request, company);
+        auditService.recordChanges(AuditEntity.DELIVERY_COMPANY, id.toString(), before, auditFields(company));
         return deliveryCompanyMapper.toResponse(deliveryCompanyRepository.save(company));
     }
 
@@ -79,8 +87,19 @@ public class DeliveryCompanyService {
     @Transactional
     public void delete(Long id) {
         DeliveryCompany company = find(id);
+        if (company.isActive()) {
+            auditService.recordDelete(AuditEntity.DELIVERY_COMPANY, id.toString(),
+                    AuditFields.create().put("name", company.getName()).toMap());
+        }
         company.setActive(false);
         deliveryCompanyRepository.save(company);
+    }
+
+    /** No public_id yet (open item): audit rows use the id, which is what the API exposes too. */
+    private static AuditFields auditFields(DeliveryCompany company) {
+        return AuditFields.create().put("name", company.getName()).put("logoUrl", company.getLogoUrl())
+                .put("phone", company.getPhone()).put("trackingUrl", company.getTrackingUrl())
+                .put("baseFee", company.getBaseFee()).put("active", company.isActive());
     }
 
     private DeliveryCompany find(Long id) {

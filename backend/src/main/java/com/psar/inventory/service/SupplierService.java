@@ -1,5 +1,8 @@
 package com.psar.inventory.service;
 
+import com.psar.audit.service.AuditEntity;
+import com.psar.audit.service.AuditFields;
+import com.psar.audit.service.AuditService;
 import com.psar.common.exception.BusinessRuleException;
 import com.psar.common.exception.NotFoundException;
 import com.psar.common.web.PageResponse;
@@ -37,6 +40,7 @@ public class SupplierService {
 
     private final SupplierRepository supplierRepository;
     private final SupplierMapper supplierMapper;
+    private final AuditService auditService;
 
     /** Used when saving a product. Missing and inactive look the same to the caller (422). */
     @Transactional(readOnly = true)
@@ -83,14 +87,19 @@ public class SupplierService {
     public SupplierResponse create(SupplierRequest request) {
         Supplier supplier = supplierMapper.toEntity(request);
         supplier.setName(supplier.getName().trim());
-        return supplierMapper.toResponse(supplierRepository.save(supplier));
+        supplier = supplierRepository.save(supplier);
+        auditService.recordCreate(AuditEntity.SUPPLIER, supplier.getPublicId().toString(),
+                auditFields(supplier).toMap());
+        return supplierMapper.toResponse(supplier);
     }
 
     @Transactional
     public SupplierResponse update(UUID publicId, SupplierRequest request) {
         Supplier supplier = find(publicId);
+        AuditFields before = auditFields(supplier);
         supplierMapper.update(request, supplier);
         supplier.setName(supplier.getName().trim());
+        auditService.recordChanges(AuditEntity.SUPPLIER, publicId.toString(), before, auditFields(supplier));
         return supplierMapper.toResponse(supplierRepository.saveAndFlush(supplier));
     }
 
@@ -104,7 +113,17 @@ public class SupplierService {
         if (supplierRepository.hasPurchaseOrdersWithStatus(supplier.getId(), PurchaseOrderStatus.PENDING)) {
             throw new BusinessRuleException("Supplier has pending purchase orders");
         }
+        if (supplier.isActive()) {
+            auditService.recordDelete(AuditEntity.SUPPLIER, publicId.toString(),
+                    AuditFields.create().put("name", supplier.getName()).toMap());
+        }
         supplier.setActive(false);
+    }
+
+    private static AuditFields auditFields(Supplier supplier) {
+        return AuditFields.create().put("name", supplier.getName()).put("phone", supplier.getPhone())
+                .put("email", supplier.getEmail()).put("address", supplier.getAddress())
+                .put("note", supplier.getNote()).put("active", supplier.isActive());
     }
 
     private Supplier find(UUID publicId) {

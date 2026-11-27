@@ -1,5 +1,8 @@
 package com.psar.inventory.service;
 
+import com.psar.audit.service.AuditEntity;
+import com.psar.audit.service.AuditFields;
+import com.psar.audit.service.AuditService;
 import com.psar.catalog.dto.response.ProductStockInfo;
 import com.psar.catalog.service.ProductStockService;
 import com.psar.common.exception.BadRequestException;
@@ -52,6 +55,7 @@ public class StockService {
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final StockMapper stockMapper;
     private final ApplicationEventPublisher events;
+    private final AuditService auditService;
 
     // ---- stock changes -----------------------------------------------------------------------
 
@@ -94,6 +98,10 @@ public class StockService {
                 : productStockService.decrease(product.id(), -change);
         StockMovement movement = record(product.id(), MovementType.ADJUST, change, balance, reason, null,
                 StringUtils.hasText(note) ? note.trim() : null, userId);
+        // stock_movements has no public id: the row points at the product
+        auditService.recordCreate(AuditEntity.STOCK_ADJUSTMENT, product.publicId().toString(),
+                AuditFields.create().put("sku", product.sku()).put("name", product.name()).put("change", change)
+                        .put("reason", reason).put("balanceAfter", balance).put("note", movement.getNote()).toMap());
         if (change < 0) {
             publishIfCrossedMinimum(product.id(), balance, -change, product.minStock());
         }

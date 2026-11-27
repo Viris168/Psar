@@ -1,5 +1,8 @@
 package com.psar.catalog.service;
 
+import com.psar.audit.service.AuditEntity;
+import com.psar.audit.service.AuditFields;
+import com.psar.audit.service.AuditService;
 import com.psar.catalog.dto.request.ProductRequest;
 import com.psar.catalog.dto.response.AdminProductResponse;
 import com.psar.catalog.dto.response.CategoryRef;
@@ -56,6 +59,7 @@ public class ProductService {
     private final SupplierService supplierService;
     private final ProductMapper productMapper;
     private final CategoryMapper categoryMapper;
+    private final AuditService auditService;
 
     // ---- storefront --------------------------------------------------------------------------
 
@@ -145,13 +149,17 @@ public class ProductService {
         String base = SlugGenerator.slugify(request.name(), sku);
         product.setSlug(SlugGenerator.unique(base, productRepository::existsBySlug));
         // quantity is not set: the DB default 0 applies (Product.quantity is read-only for JPA)
-        return toAdminResponse(saveChecked(product));
+        product = saveChecked(product);
+        auditService.recordCreate(AuditEntity.PRODUCT, product.getPublicId().toString(),
+                auditFields(product, request.supplierPublicId()).toMap());
+        return toAdminResponse(product);
     }
 
     /** Everything except quantity (not in the request). The slug is kept so links don't break. */
     @Transactional
     public AdminProductResponse update(UUID publicId, ProductRequest request) {
         Product product = find(publicId);
+        AuditFields before = auditFields(product, supplierPublicId(product.getSupplierId()));
         String sku = normalizeSku(request.sku());
         if (!sku.equals(product.getSku()) && productRepository.existsBySkuAndIdNot(sku, product.getId())) {
             throw skuTaken();
@@ -168,7 +176,10 @@ public class ProductService {
         if (request.unit() != null) {
             product.setUnit(request.unit().trim());
         }
-        return toAdminResponse(saveChecked(product));
+        product = saveChecked(product);
+        auditService.recordChanges(AuditEntity.PRODUCT, publicId.toString(), before,
+                auditFields(product, request.supplierPublicId()));
+        return toAdminResponse(product);
     }
 
     /** Soft delete (orders and stock movements keep their reference). Already inactive = no-op. */
@@ -178,6 +189,8 @@ public class ProductService {
         if (product.isActive()) {
             product.setActive(false);
             productRepository.save(product);
+            auditService.recordDelete(AuditEntity.PRODUCT, publicId.toString(),
+                    AuditFields.create().put("sku", product.getSku()).put("name", product.getName()).toMap());
         }
     }
 
@@ -197,6 +210,24 @@ public class ProductService {
             }
             throw ex;
         }
+    }
+
+    /** Quantity is left out: it changes through stock movements, which have their own history. */
+    private static AuditFields auditFields(Product product, UUID supplierPublicId) {
+        return AuditFields.create().put("sku", product.getSku()).put("name", product.getName())
+                .put("nameKh", product.getNameKh()).put("description", product.getDescription())
+                .put("categorySlug", product.getCategory().getSlug()).put("supplierPublicId", supplierPublicId)
+                .put("costPrice", product.getCostPrice()).put("sellPrice", product.getSellPrice())
+                .put("minStock", product.getMinStock()).put("unit", product.getUnit())
+                .put("active", product.isActive());
+    }
+
+    private UUID supplierPublicId(Long supplierId) {
+        if (supplierId == null) {
+            return null;
+        }
+        SupplierSummary supplier = supplierService.summaries(Set.of(supplierId)).get(supplierId);
+        return supplier == null ? null : supplier.publicId();
     }
 
     private Product find(UUID publicId) {
