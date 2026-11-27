@@ -210,8 +210,8 @@ Order statuses: `PENDING_PAYMENT, CONFIRMED, PAID, PROCESSING, OUT_FOR_DELIVERY,
 
 | Table | Key columns |
 |---|---|
-| notifications | user_id, type, title, message, channel (APP/TELEGRAM/EMAIL), is_read |
-| audit_logs | user_id, action (CREATE/UPDATE/DELETE/LOGIN/AI_ACTION), entity, entity_id, details (JSONB) |
+| notifications | public_id, user_id, type, title, message, link, channel (APP/TELEGRAM/EMAIL), is_read, read_at |
+| audit_logs | public_id, user_id, action (CREATE/UPDATE/DELETE/LOGIN/LOGIN_FAILED/AI_ACTION), entity, entity_id (public id), details (JSONB), ip_address — insert-only |
 | outbox_events | id (UUID), aggregate_type, aggregate_id, event_type (routing key), payload (JSONB), status (PENDING/SENT/FAILED), attempts, created_at, sent_at |
 
 **AI**
@@ -251,15 +251,16 @@ Never edit an applied migration — always add a new version.
 V1__users_and_accounts.sql      users, user_profiles, refresh_tokens, delivery_companies, addresses
 V2__catalog_and_inventory.sql   categories, suppliers, products, product_images, stock_movements,
                                 purchase_orders, purchase_order_items
-V3__orders_and_payments.sql     carts, cart_items, orders, order_items, order_status_history, payments
-V4__promotions.sql              promotions, promotion_targets, order_promotions
-V5__points_and_rewards.sql      point_rules, point_transactions, rewards, reward_redemptions
+V3__audit_and_notifications.sql audit_logs, notifications (Phase 3)
+V4__orders_and_payments.sql     carts, cart_items, orders, order_items, order_status_history, payments
+V5__promotions.sql              promotions, promotion_targets, order_promotions
+V6__points_and_rewards.sql      point_rules, point_transactions, rewards, reward_redemptions
                                 + ALTER orders ADD FK reward_redemption_id
-V6__subscriptions.sql           subscription_plans, user_subscriptions
+V7__subscriptions.sql           subscription_plans, user_subscriptions
                                 + ALTER payments ADD FK user_subscription_id
-V7__system.sql                  notifications, audit_logs, outbox_events, shedlock
-V8__ai_chatbot.sql              CREATE EXTENSION vector; chat_*, ai_pending_actions, documents
-V9__reviews.sql                 reviews
+V8__messaging.sql               outbox_events, shedlock (Phase 9)
+V9__ai_chatbot.sql              CREATE EXTENSION vector; chat_*, ai_pending_actions, documents
+V10__reviews.sql                reviews
 ```
 
 ---

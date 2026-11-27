@@ -40,9 +40,20 @@ points and the low-stock event, so neither agent waits for the other.
 
 ---
 
-## Step 0 — shared contract (lead, on `main`)
+## Step 0 — shared contract ✅ done (on `main`)
 
-Every agent builds on these files and **must not change them**.
+Already built and tested. Every agent builds on these files and **must not change them**.
+
+**Things to know before you start:**
+- `AuditService.record` / `recordAs` need an **existing transaction** (`Propagation.MANDATORY`): call them from
+  the `@Transactional` service method that makes the change. `recordLoginFailed` opens its own.
+- `AuditLog` is `@Immutable` with no setters: build rows with `AuditLog.of(...)` (only `AuditService` does).
+- Roles are passed as **strings** (`"ADMIN"`, `"MANAGER"`): `user.entity.Role` is private to the user module
+  (ArchUnit). `UserDirectoryService.activeUserIdsWithRoles(Set<String>)` resolves them.
+- `SystemFixtures` is a bean in every `IntegrationTest`: `system.user(Role)`, `system.user(Role, active)`,
+  `system.auditRows(entity, entityId)`, `system.notifications(user, type)`.
+- `Step0SystemSchemaTest` shows how to set a logged-in user for a service-level test and how to count
+  `StockLowEvent`s with `@RecordApplicationEvents`.
 
 ### 1. `V3__audit_and_notifications.sql`
 
@@ -67,20 +78,23 @@ Audit rows are **insert-only**: no update or delete endpoint, and the entity has
   - The actor (`user_id`) and IP come from the current request (`SecurityContext` / `RequestContextHolder`),
     so callers don't pass them; null outside a request.
   - Step 0 ships it working but called nowhere; Agent A adds the calls.
-- **`AuditService.recordLoginFailed(String email)`**: `Propagation.REQUIRES_NEW`, because a failed login
-  rolls back its own transaction. Stores the email in `details`, never the password.
+- **`AuditService.recordAs(Long userId, …)`**: same as `record` for an actor who isn't logged in yet (the
+  successful login itself).
+- **`AuditService.recordLoginFailed(String email, Long userIdIfKnown, String reason)`**: `Propagation.REQUIRES_NEW`,
+  because a failed login rolls back its own transaction. Stores the email and reason (e.g. `BAD_CREDENTIALS`,
+  `ACCOUNT_DISABLED`) in `details`, never the password. Entity is `AuditService.AUTH`.
 - **`NotificationService.notifyUsers(Collection<Long> userIds, NotificationType type, String title,
-  String message, String link)`** and **`notifyRoles(Set<Role> roles, …)`** (every **active** user with one of
-  those roles). Later phases (orders, points, …) call these.
-- **`StockLowEvent(Long productId)`**: `StockService` publishes it when a stock change takes a product
-  **from above `min_stock` to at or below it** (crossing only, so repeated sales below the minimum don't
-  spam). `ProductStockService.decrease` / the adjust path return the new balance and `min_stock` for this.
-  The event carries only the id (consumers reload, per `CLAUDE.md`).
+  String message, String link)`** and **`notifyRoles(Set<String> roles, …)`** (every **active** user with one of
+  those roles, via `UserDirectoryService`). Duplicate ids get one row. Later phases (orders, points, …) call these.
+- **`com.psar.inventory.event.StockLowEvent(Long productId)`**: `StockService.remove` / `adjust` publish it when
+  a stock change takes a product **from above `min_stock` to at or below it** (crossing only, so repeated sales
+  below the minimum don't spam). The event carries only the id (consumers reload with `StockService.product(id)`,
+  per `CLAUDE.md`).
 
 ### 4. Test support
-`AuditFixtures` / `NotificationFixtures` beans in `IntegrationTest` (create a user with a role, read the
-audit rows for an entity, read a user's notifications), plus `Step0SystemSchemaTest` (insert-only audit row,
-one-row-per-user notifications, `StockLowEvent` fires only on crossing).
+`SystemFixtures` (see above) and `audit/service/Step0SystemSchemaTest`: audit row commits / rolls back with
+the caller, failed login survives a rollback, notifications only for active users of the roles, one row per user,
+`StockLowEvent` only on crossing.
 
 ---
 
@@ -88,13 +102,17 @@ one-row-per-user notifications, `StockLowEvent` fires only on crossing).
 
 | File / area | Owner |
 |---|---|
-| Step 0 files (migration, entities, enums, repositories, `record` / `recordLoginFailed`, `notifyUsers` / `notifyRoles`, `StockLowEvent` and its publishing in `StockService`, fixtures) | **lead only** |
+| Step 0 files (migration, entities, enums, repositories, `record` / `recordAs` / `recordLoginFailed`, `notifyUsers` / `notifyRoles`, `UserDirectoryService`, `StockLowEvent` and its publishing in `StockService`, `SystemFixtures`) | **lead only** |
 | Rest of `audit/**`; the one-line `auditService.record(...)` calls inside existing services (user, delivery, catalog, inventory) | Agent A |
 | Rest of `notification/**`, `LowStockNotificationListener` | Agent B |
 | `SecurityConfig`, `common/exception/**`, `common/handler/**`, Flyway | **nobody** (lead only) |
 
 Agent A only **adds** audit calls to existing services — no other changes to their logic. If a call needs
-data the method doesn't have, ask the lead.
+data the method doesn't have, ask the lead. Two cases to know:
+- `ProductImageService.upload` has no transaction around the Cloudinary upload (on purpose): put the
+  audit call inside its short `save(...)` transaction, not before the upload.
+- Delivery companies have no `public_id` yet (open item from Phase 1): use their `id` as `entity_id` for now,
+  it is already what their API exposes.
 
 ---
 
@@ -138,9 +156,9 @@ data the method doesn't have, ask the lead.
   unread count, mark one read, mark all read. Every lookup is `findByPublicIdAndUserId` — another user's
   notification is a **404**.
 - **`LowStockNotificationListener`**: `@TransactionalEventListener(AFTER_COMMIT)` on `StockLowEvent`, then a
-  **new transaction** (`REQUIRES_NEW`): reload the product (via `ProductStockService` / catalog service, not
-  its repository), skip it if it's no longer at or below the minimum or is inactive, then
-  `notifyRoles({ADMIN, MANAGER}, LOW_STOCK, "Low stock: {name}", "{name} ({sku}) has {qty} left (minimum {min}).",
+  **new transaction** (`REQUIRES_NEW`): reload the product with `StockService.product(id)` (not `ProductStockService`: ArchUnit allows only
+  `StockService` to use it), skip it if it's no longer at or below the minimum or is inactive, then
+  `notifyRoles({"ADMIN", "MANAGER"}, LOW_STOCK, "Low stock: {name}", "{name} ({sku}) has {qty} left (minimum {min}).",
   "/admin/inventory/low-stock")`. A failure is logged and never affects the stock change (it already committed).
 - **`NotificationController`** (any logged-in user):
 
@@ -185,7 +203,7 @@ Before finishing: `cd backend && ./mvnw test` passes; endpoints look right in Sw
 
 ## Done when
 
-- [ ] Step 0 merged
+- [x] Step 0 merged
 - [ ] Agent B merged
 - [ ] Agent A merged
 - [ ] End-to-end test passes; `CLAUDE.md` "Current phase" → Phase 3 done

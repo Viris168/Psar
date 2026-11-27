@@ -6,7 +6,10 @@ import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,4 +29,8 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<User> findAllByRoleAndActiveTrueOrderByIdAsc(Role role);
+
+    /** Ids of the active users with one of these roles, e.g. who gets a low-stock notification. */
+    @Query("select u.id from User u where u.active = true and u.role in :roles order by u.id")
+    List<Long> findActiveIdsByRoleIn(@Param("roles") Collection<Role> roles);
 }

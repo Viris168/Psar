@@ -17,7 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
  */
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import({TestcontainersConfiguration.class, CatalogFixtures.class})
+@Import({TestcontainersConfiguration.class, CatalogFixtures.class, SystemFixtures.class})
 public abstract class IntegrationTest {
 
     @Autowired

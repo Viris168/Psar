@@ -11,10 +11,12 @@ import com.psar.inventory.entity.MovementReason;
 import com.psar.inventory.entity.MovementType;
 import com.psar.inventory.entity.PurchaseOrder;
 import com.psar.inventory.entity.StockMovement;
+import com.psar.inventory.event.StockLowEvent;
 import com.psar.inventory.mapper.StockMapper;
 import com.psar.inventory.repository.PurchaseOrderRepository;
 import com.psar.inventory.repository.StockMovementRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -49,6 +51,7 @@ public class StockService {
     private final StockMovementRepository stockMovementRepository;
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final StockMapper stockMapper;
+    private final ApplicationEventPublisher events;
 
     // ---- stock changes -----------------------------------------------------------------------
 
@@ -63,12 +66,15 @@ public class StockService {
     /**
      * Removes stock (OUT), e.g. Phase 4 checkout reserving items.
      * Not enough stock → 409 INSUFFICIENT_STOCK, nothing changes and no movement is written.
+     * Publishes {@link StockLowEvent} if this takes the product to its minimum.
      */
     @Transactional
     public void remove(Long productId, int qty, MovementReason reason, Long referenceId, Long userId) {
         requirePositive(qty);
+        int minStock = productStockService.require(productId).minStock();
         int balance = productStockService.decrease(productId, qty);
         record(productId, MovementType.OUT, -qty, balance, reason, referenceId, null, userId);
+        publishIfCrossedMinimum(productId, balance, qty, minStock);
     }
 
     /** Manual change by a manager: DAMAGE, RETURN or CORRECTION; signed, not 0; never below 0 (409). */
@@ -88,6 +94,9 @@ public class StockService {
                 : productStockService.decrease(product.id(), -change);
         StockMovement movement = record(product.id(), MovementType.ADJUST, change, balance, reason, null,
                 StringUtils.hasText(note) ? note.trim() : null, userId);
+        if (change < 0) {
+            publishIfCrossedMinimum(product.id(), balance, -change, product.minStock());
+        }
         return stockMapper.toResponse(movement, stockMapper.toProduct(product), null);
     }
 
@@ -180,6 +189,16 @@ public class StockService {
         }
         return purchaseOrderRepository.findAllById(poIds).stream()
                 .collect(Collectors.toMap(PurchaseOrder::getId, PurchaseOrder::getPoNo));
+    }
+
+    /**
+     * Only on crossing (above the minimum before, at or below it now), so sales while already low don't
+     * notify again. Listeners run after commit, so a rolled-back change notifies nobody.
+     */
+    private void publishIfCrossedMinimum(Long productId, int balance, int removed, int minStock) {
+        if (balance <= minStock && balance + removed > minStock) {
+            events.publishEvent(new StockLowEvent(productId));
+        }
     }
 
     private static void requirePositive(int qty) {
