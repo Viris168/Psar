@@ -16,8 +16,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
@@ -246,6 +252,38 @@ class AdminUserControllerTest extends IntegrationTest {
                 .andExpect(jsonPath("$.code").value("BUSINESS_RULE"));
     }
 
+    /**
+     * Two admins demote each other at the same time: the row lock in assertNotLastActiveAdmin must let
+     * only one win. Needs committed data (the requests run on other threads), so the other admins are
+     * deactivated for real and re-enabled afterwards.
+     */
+    @Test
+    void changeRole_twoAdminsDemoteEachOtherConcurrently_oneAdminRemains() throws Exception {
+        List<User> otherAdmins = activeAdmins();
+        otherAdmins.forEach(admin -> admin.setActive(false));
+        userRepository.saveAll(otherAdmins);
+        try {
+            User a = saveUser(Role.ADMIN, "race-a-" + shortId() + "@test.local");
+            User b = saveUser(Role.ADMIN, "race-b-" + shortId() + "@test.local");
+            CountDownLatch start = new CountDownLatch(1);
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try {
+                Future<Integer> aDemotesB = pool.submit(demote(start, a, b));
+                Future<Integer> bDemotesA = pool.submit(demote(start, b, a));
+                start.countDown();
+
+                assertThat(List.of(aDemotesB.get(), bDemotesA.get())).containsExactlyInAnyOrder(200, 422);
+            } finally {
+                pool.shutdownNow();
+            }
+            assertThat(activeAdmins()).hasSize(1);
+        } finally {
+            List<User> restore = userRepository.findAllById(otherAdmins.stream().map(User::getId).toList());
+            restore.forEach(admin -> admin.setActive(true));
+            userRepository.saveAll(restore);
+        }
+    }
+
     // ---- change status -----------------------------------------------------
 
     @Test
@@ -322,6 +360,22 @@ class AdminUserControllerTest extends IntegrationTest {
         assertThat(userRepository.findAllByRoleAndActiveTrueOrderByIdAsc(Role.ADMIN))
                 .extracting(User::getId).containsExactly(lastAdmin.getId());
         return lastAdmin;
+    }
+
+    /** No test transaction here, and the repository's locking query needs one. */
+    private List<User> activeAdmins() {
+        return userRepository.findAll().stream()
+                .filter(user -> user.getRole() == Role.ADMIN && user.isActive())
+                .toList();
+    }
+
+    private Callable<Integer> demote(CountDownLatch start, User caller, User target) {
+        return () -> {
+            start.await();
+            return mockMvc.perform(patch(USERS + "/" + target.getPublicId() + "/role").with(TestAuth.as(caller))
+                            .contentType(APPLICATION_JSON).content(json(Map.of("role", "STAFF"))))
+                    .andReturn().getResponse().getStatus();
+        };
     }
 
     private User saveUser(Role role, String email) {
