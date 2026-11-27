@@ -1,6 +1,7 @@
 package com.psar;
 
 import com.psar.support.InMemoryFileStore;
+import com.psar.support.TestClock;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
@@ -20,6 +21,13 @@ public class TestcontainersConfiguration {
     PostgreSQLContainer<?> postgresContainer() {
         return new PostgreSQLContainer<>(
                 DockerImageName.parse("pgvector/pgvector:pg16").asCompatibleSubstituteFor("postgres"));
+    }
+
+    /** Movable time for expiry tests; IntegrationTest resets it after each test. */
+    @Bean
+    @Primary
+    TestClock testClock() {
+        return new TestClock();
     }
 
     /** Cloudinary has no local emulator; uploads in tests never leave the JVM. */

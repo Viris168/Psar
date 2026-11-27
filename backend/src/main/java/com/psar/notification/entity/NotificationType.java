@@ -1,6 +1,12 @@
 package com.psar.notification.entity;
 
-/** Only LOW_STOCK in Phase 3; order, points, subscription and promotion types come with their phases. */
+/** Points, subscription and promotion types come with their phases. */
 public enum NotificationType {
-    LOW_STOCK
+    LOW_STOCK,
+    /** Staff: a new order to prepare (COD now; paid KHQR orders from Phase 5). */
+    NEW_ORDER,
+    /** Customer: their order moved on (processing, out for delivery, delivered, …). */
+    ORDER_STATUS_CHANGED,
+    /** Customer: their order was cancelled (by them, staff, or not paid in time). */
+    ORDER_CANCELLED
 }

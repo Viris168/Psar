@@ -37,6 +37,10 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
     @EntityGraph(attributePaths = {"category", "category.parent"})
     Optional<Product> findWithCategoryByPublicId(UUID publicId);
 
+    /** Cart and checkout: products with their category chain, to decide "purchasable" in one query. */
+    @EntityGraph(attributePaths = {"category", "category.parent"})
+    List<Product> findAllWithCategoryByIdIn(Collection<Long> ids);
+
     @EntityGraph(attributePaths = {"category", "category.parent"})
     Optional<Product> findWithCategoryBySlug(String slug);
 

@@ -59,9 +59,30 @@ DELIVERED ─► REFUNDED (Phase 5)
 
 ---
 
-## Step 0 — shared contract (lead, on `main`)
+## Step 0 — shared contract ✅ done (on `main`)
 
-Every agent builds on these files and **must not change them**.
+Already built and tested. Every agent builds on these files and **must not change them**.
+
+**Things to know before you start:**
+- **Stock:** call `StockService.reserve(Map<productId, qty>, orderId, userId)` / `release(...)`. They sort by
+  product id themselves. (`remove` / `receive` take `MovementReason`, which is in `inventory.entity` — other
+  modules can't use it, ArchUnit.)
+- **Enums across modules:** other modules can't use `order.entity` (or `notification.entity`). Events carry
+  statuses as strings; `OrderLookupService.summary(orderId)` returns an `OrderSummary` DTO for listeners.
+  So the order notification listener lives **in the notification module** (`notification/listener/`), like the
+  low-stock one.
+- **Pricing:** `PricingCalculator` is a bean (registered in `order/config/OrderConfig`, because the pricing
+  package may not use Spring) — inject it.
+- **Time:** inject `java.time.Clock` for "now". In integration tests it is a `TestClock`
+  (`clock.advance(Duration.ofMinutes(16))`), reset after every test; scheduling is off
+  (`app.scheduling.enabled=false`), so call job methods directly.
+- **Locks ready to use:** `CartRepository.lockByUserId` (checkout), `OrderRepository.lockByPublicId` /
+  `lockById` (status changes), `OrderRepository.findIdsByStatusAndExpiresAtBefore` (expiry job).
+- **`OrderFixtures`** (bean in every `IntegrationTest`): `customer()`, `driver()`, `cityAddress(user)` (at the
+  shop's default location), `provinceAddress(user, company)`, `deliveryCompany(baseFee)`, `cart(user,
+  Map<Product, qty>)`, `order(user, address, method, status, Map<Product, qty>)` — a full order with stock
+  reserved and a PENDING payment.
+- Examples: `order/service/Step0OrderSchemaTest`, `order/entity/OrderStatusTest`.
 
 ### 1. `V4__orders_and_payments.sql`
 
@@ -88,16 +109,17 @@ payment module in Phase 5), `OrderStatus` (with `canMoveTo`), `PaymentMethod`, `
 
 ### 3. Cross-module lookups (other modules expose DTOs, never entities)
 - **catalog** `ProductCatalogService.sellable(Collection<Long> productIds)` → `Map<Long, SellableProduct>`
-  (`id, publicId, slug, sku, name, sellPrice, mainImageUrl, quantity, purchasable`) — `purchasable` = product
+  (`id, publicId, slug, sku, name, sellPrice, unit, mainImageUrl, quantity, purchasable`, `inStock()`) — `purchasable` = product
   **and** its category (and parent) active. Plus `sellable(UUID publicId)`.
 - **user** `AddressLookupService.requireOwned(Long userId, UUID addressPublicId)` → `AddressSnapshot`
-  (all delivery fields; another user's address = 404) and `UserDirectoryService.isActiveDriver(Long userId)`,
-  `driverIds()` (active STAFF with position "Driver").
+  (all delivery fields, `singleLine()`; another user's address = 404), `AddressLookupService.insidePhnomPenh(lat, lng)`
+  (the address form's box), and `UserDirectoryService.isActiveDriver(Long userId)`, `driverIds()` (active STAFF
+  with position "Driver").
 - **delivery** `DeliveryCompanyService.snapshot(Long id)` → `DeliveryCompanySnapshot(id, name, baseFee,
   trackingUrl, active)`.
-- **inventory** stock goes through the existing `StockService`: reserve = `remove(productId, qty, RESERVE,
-  orderId, userId)`, release = `receive(productId, qty, RELEASE, orderId, userId)`. **Always in product id
-  order** (the deadlock fix from Phase 2).
+- **inventory** `StockService.reserve(Map<Long, Integer>, orderId, userId)` (OUT, RESERVE) and `release(...)`
+  (IN, RELEASE), both **in product id order** (the deadlock fix from Phase 2).
+- **order** `OrderLookupService.summary(orderId)` → `OrderSummary` (for listeners in other modules).
 
 ### 4. Pricing & delivery contract (Agent C replaces the bodies, not the signatures)
 - `order.service.pricing.PricingCalculator.price(PricingInput) → PricingResult` — pure (ArchUnit
@@ -115,11 +137,11 @@ tests can move time instead of sleeping. Scheduling is **off in tests** (`app.sc
 call the job method directly.
 
 ### 6. Events (ids only; consumers reload)
-`OrderPlacedEvent(orderId)`, `OrderStatusChangedEvent(orderId, from, to)` — published inside the transaction.
+`order.event.OrderPlacedEvent(orderId)`, `OrderStatusChangedEvent(orderId, from, to, note)` (statuses as
+strings) — published inside the transaction.
 
 ### 7. Test support
-`OrderFixtures` (a customer with a CITY / PROVINCE address, a product with stock, a cart, an order in a given
-status) and `Step0OrderSchemaTest` (order numbers, snapshot columns, `canMoveTo` table, lookups).
+`OrderFixtures`, `TestClock`, `Step0OrderSchemaTest` and `OrderStatusTest` (see above).
 
 ---
 
@@ -127,9 +149,9 @@ status) and `Step0OrderSchemaTest` (order numbers, snapshot columns, `canMoveTo`
 
 | File / area | Owner |
 |---|---|
-| Step 0 files (migration, entities, enums, repositories, `OrderStatus`, events, the lookups in catalog / user / delivery, the two contract signatures, `OrderFixtures`) | **lead only** |
+| Step 0 files (migration, entities, enums, repositories, `OrderStatus`, events, `OrderLookupService`, the lookups in catalog / user / delivery / inventory, the two contract signatures, `OrderConfig`, `SchedulingConfig`, `OrderFixtures`, `TestClock`) | **lead only** |
 | `order/service/cart/**`, `order/service/checkout/**`, `CartController`, `CheckoutController`, cart & checkout DTOs | Agent A |
-| `order/service/orders/**`, `OrderController`, `AdminOrderController`, order DTOs / mapper, `OrderNotificationListener`, `OrderExpiryJob` | Agent B |
+| `order/service/orders/**`, `OrderController`, `AdminOrderController`, order DTOs / mapper, `OrderExpiryJob`, `notification/listener/OrderNotificationListener` | Agent B |
 | Bodies of `PricingCalculator`, `DeliveryQuoteService`; `DeliveryFeeCalculator`; `CheckoutQuoteController`; `app.shop.*` / `app.delivery.*` config | Agent C |
 | `SecurityConfig`, `common/exception/**`, `common/handler/**`, Flyway, other modules' code | **nobody** (lead only) |
 
@@ -152,7 +174,7 @@ status) and `Step0OrderSchemaTest` (order numbers, snapshot columns, `canMoveTo`
   5. Insert the order (snapshots of address, company name, product names, SKUs, unit prices) + items +
      first status history row (`PENDING_PAYMENT` with `expires_at = now + 15 min` for KHQR, `CONFIRMED` for
      COD).
-  6. **Reserve stock in product id order** via `StockService.remove(..., RESERVE, orderId, userId)`. Not
+  6. **Reserve stock** via `StockService.reserve(quantities, orderId, userId)` (it sorts by product id). Not
      enough → 409 `INSUFFICIENT_STOCK` naming the product, and **everything rolls back** (no order, cart kept).
   7. Insert the `PENDING` payment row (amount = total, same `expires_at`; no QR until Phase 5).
   8. Clear the cart. Publish `OrderPlacedEvent`.
@@ -197,12 +219,12 @@ status) and `Step0OrderSchemaTest` (order numbers, snapshot columns, `canMoveTo`
   - `PUT /tracking` — PROVINCE only.
   - Cancel (ADMIN/MANAGER) any order before it leaves the shop.
 - **Every status change** (lock the order row first, `SELECT … FOR UPDATE`): history row with `changed_by`,
-  `OrderStatusChangedEvent`, and on **CANCELLED**: release every item's stock (product id order,
-  `RELEASE`, reference = order) and mark the payment `CANCELLED`. Cancelling twice = 409, stock released once.
+  `OrderStatusChangedEvent`, and on **CANCELLED**: release every item's stock
+  (`StockService.release(..)`, reference = order) and mark the payment `CANCELLED`. Cancelling twice = 409, stock released once.
 - **`OrderExpiryJob`**: `@Scheduled` every minute with `@SchedulerLock`, `PENDING_PAYMENT` orders past `expires_at` → CANCELLED as above
   (`changed_by` null, note "Not paid in time"). Each order in its own transaction; idempotent (re-check status
   under the lock).
-- **`OrderNotificationListener`** (AFTER_COMMIT, new transaction, failures only logged): `OrderPlacedEvent`
+- **`notification/listener/OrderNotificationListener`** (AFTER_COMMIT, reloads with `OrderLookupService`, new transaction, failures only logged): `OrderPlacedEvent`
   for COD → `NEW_ORDER` to ADMIN/MANAGER/STAFF; status changes → `ORDER_STATUS_CHANGED` to the customer
   (cancellation → `ORDER_CANCELLED`, with the reason). KHQR "new paid order" comes in Phase 5.
 
@@ -274,7 +296,7 @@ change? Ask the lead. Before finishing: `cd backend && ./mvnw test` passes; endp
 
 ## Done when
 
-- [ ] Step 0 merged
+- [x] Step 0 merged
 - [ ] Agent C merged
 - [ ] Agent B merged
 - [ ] Agent A merged

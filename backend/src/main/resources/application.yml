@@ -36,6 +36,8 @@ app:
     refresh-token-ttl: P7D
   order:
     payment-timeout: PT15M
+  scheduling:
+    enabled: ${SCHEDULING_ENABLED:true}   # @Scheduled jobs (with ShedLock); off in tests
   storage:
     # cloudinary://<api-key>:<api-secret>@<cloud-name> (Cloudinary console → API Keys). Empty: the app
     # still starts, only uploads fail.

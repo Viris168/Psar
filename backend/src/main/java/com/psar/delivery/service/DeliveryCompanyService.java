@@ -8,6 +8,7 @@ import com.psar.common.exception.NotFoundException;
 import com.psar.common.web.PageResponse;
 import com.psar.delivery.dto.request.DeliveryCompanyRequest;
 import com.psar.delivery.dto.response.DeliveryCompanyResponse;
+import com.psar.delivery.dto.response.DeliveryCompanySnapshot;
 import com.psar.delivery.entity.DeliveryCompany;
 import com.psar.delivery.mapper.DeliveryCompanyMapper;
 import com.psar.delivery.repository.DeliveryCompanyRepository;
@@ -42,6 +43,15 @@ public class DeliveryCompanyService {
         if (deliveryCompanyId == null || !deliveryCompanyRepository.existsByIdAndActiveTrue(deliveryCompanyId)) {
             throw new BusinessRuleException("Delivery company is not available");
         }
+    }
+
+    /** For checkout and order pages (inactive companies too: old orders still show their company). 404 if missing. */
+    @Transactional(readOnly = true)
+    public DeliveryCompanySnapshot snapshot(Long id) {
+        DeliveryCompany company = deliveryCompanyRepository.findById(id)
+                .orElseThrow(() -> NotFoundException.of("Delivery company"));
+        return new DeliveryCompanySnapshot(company.getId(), company.getName(), company.getBaseFee(),
+                company.getTrackingUrl(), company.isActive());
     }
 
     /** Customer list: active companies only. */

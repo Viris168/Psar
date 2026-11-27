@@ -2,6 +2,7 @@ package com.psar.order.service.pricing;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 
 /**
  * Pure pricing logic: no Spring, no repositories, no I/O.
@@ -20,6 +21,22 @@ public final class PricingCalculator {
     /** Rounds a money amount to 2 decimals, HALF_UP. */
     public static BigDecimal money(BigDecimal amount) {
         return amount.setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Prices an order. Step 0 version: line totals, subtotal and the delivery fee; no discounts yet.
+     * Agent C (Phase 4) completes it; Phases 6–8 add promotions, the voucher and member benefits here.
+     */
+    public PricingResult price(PricingInput input) {
+        List<PricingResult.Line> lines = input.lines().stream()
+                .map(line -> new PricingResult.Line(line.productId(), line.quantity(), 0, money(line.unitPrice()),
+                        money(BigDecimal.ZERO), money(line.unitPrice().multiply(BigDecimal.valueOf(line.quantity())))))
+                .toList();
+        BigDecimal subtotal = money(lines.stream().map(PricingResult.Line::lineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        BigDecimal zero = money(BigDecimal.ZERO);
+        BigDecimal fee = money(input.deliveryFee());
+        return new PricingResult(lines, subtotal, zero, zero, zero, fee, total(subtotal, zero, fee));
     }
 
     /** total = subtotal - discounts + deliveryFee, never below zero. */

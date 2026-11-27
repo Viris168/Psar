@@ -33,6 +33,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -79,6 +80,26 @@ public class StockService {
         int balance = productStockService.decrease(productId, qty);
         record(productId, MovementType.OUT, -qty, balance, reason, referenceId, null, userId);
         publishIfCrossedMinimum(productId, balance, qty, minStock);
+    }
+
+    /**
+     * Checkout: reserves every line (OUT, RESERVE, reference = the order) in product id order, so concurrent
+     * checkouts sharing products can't deadlock. Not enough of one → 409 INSUFFICIENT_STOCK and, because this
+     * joins the caller's transaction, the whole checkout rolls back.
+     *
+     * @param quantities product id → units (paid + free)
+     */
+    @Transactional
+    public void reserve(Map<Long, Integer> quantities, Long orderId, Long userId) {
+        new TreeMap<>(quantities).forEach((productId, qty) ->
+                remove(productId, qty, MovementReason.RESERVE, orderId, userId));
+    }
+
+    /** Cancel / expiry: puts a reservation back (IN, RELEASE, reference = the order), in product id order. */
+    @Transactional
+    public void release(Map<Long, Integer> quantities, Long orderId, Long userId) {
+        new TreeMap<>(quantities).forEach((productId, qty) ->
+                receive(productId, qty, MovementReason.RELEASE, orderId, userId));
     }
 
     /** Manual change by a manager: DAMAGE, RETURN or CORRECTION; signed, not 0; never below 0 (409). */

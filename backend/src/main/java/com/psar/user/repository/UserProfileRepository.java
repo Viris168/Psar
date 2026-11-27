@@ -19,4 +19,11 @@ public interface UserProfileRepository extends JpaRepository<UserProfile, Long> 
     /** Profile plus its user in one query (ProfileResponse needs email, role, publicId). */
     @Query("select p from UserProfile p join fetch p.user u where u.id = :userId")
     Optional<UserProfile> findByUserIdWithUser(@Param("userId") Long userId);
+
+    /** Drivers: active STAFF whose position is "Driver" (any case). */
+    @Query("""
+            select u.id from UserProfile p join p.user u
+            where u.active = true and u.role = com.psar.user.entity.Role.STAFF and lower(p.position) = 'driver'
+            order by u.id""")
+    List<Long> findActiveDriverIds();
 }

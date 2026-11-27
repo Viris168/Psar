@@ -11,6 +11,7 @@ public final class AuditEntity {
     public static final String SUPPLIER = "SUPPLIER";
     public static final String PURCHASE_ORDER = "PURCHASE_ORDER";
     public static final String STOCK_ADJUSTMENT = "STOCK_ADJUSTMENT";
+    public static final String ORDER = "ORDER";
 
     private AuditEntity() {
     }

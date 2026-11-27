@@ -27,6 +27,8 @@
         <!-- 1.21.4+ negotiates Docker API version; 1.21.3 (Boot default) fails on Docker Engine 29+ -->
         <testcontainers.version>1.21.4</testcontainers.version>
         <cloudinary.version>2.6.0</cloudinary.version>
+        <!-- 6.x is the Spring 6 line; 7.x needs Spring 7 / Boot 4 -->
+        <shedlock.version>6.10.0</shedlock.version>
     </properties>
 
     <dependencies>
@@ -93,6 +95,18 @@
             <version>${springdoc.version}</version>
         </dependency>
 
+        <!-- Scheduled jobs run on one instance at a time (Phase 4: order expiry) -->
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-spring</artifactId>
+            <version>${shedlock.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-provider-jdbc-template</artifactId>
+            <version>${shedlock.version}</version>
+        </dependency>
+
         <!-- File storage: Cloudinary (product images; later avatars, logos, documents) -->
         <dependency>
             <groupId>com.cloudinary</groupId>
@@ -115,20 +129,10 @@
         <!--
             Added in later phases (uncomment when you reach them):
 
-            Phase 9 - RabbitMQ + ShedLock
+            Phase 9 - RabbitMQ (ShedLock was added in Phase 4)
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-starter-amqp</artifactId>
-            </dependency>
-            <dependency>
-                <groupId>net.javacrumbs.shedlock</groupId>
-                <artifactId>shedlock-spring</artifactId>
-                <version>CHECK_LATEST</version>
-            </dependency>
-            <dependency>
-                <groupId>net.javacrumbs.shedlock</groupId>
-                <artifactId>shedlock-provider-jdbc-template</artifactId>
-                <version>CHECK_LATEST</version>
             </dependency>
 
             Phase 11 - Spring AI (import the spring-ai-bom in dependencyManagement)
