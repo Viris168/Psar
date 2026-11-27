@@ -84,7 +84,7 @@ public class CategoryService {
 
     @Transactional
     public AdminCategoryResponse update(String slug, CategoryRequest request) {
-        Category category = find(slug);
+        Category category = findForUpdate(slug);
         boolean wasActive = category.isActive();
         Category parent = resolveParent(request.parentSlug(), category);
         categoryMapper.update(request, category);
@@ -101,7 +101,7 @@ public class CategoryService {
     /** Soft delete. Deleting an already inactive category is a no-op. */
     @Transactional
     public void delete(String slug) {
-        Category category = find(slug);
+        Category category = findForUpdate(slug);
         if (!category.isActive()) {
             return;
         }
@@ -112,10 +112,13 @@ public class CategoryService {
 
     // ---- used by ProductService --------------------------------------------------------------
 
-    /** For saving a product. Missing and inactive look the same (422). */
-    @Transactional(readOnly = true)
+    /**
+     * For saving a product. Missing and inactive look the same (422). Share-locks the category until the
+     * caller's transaction ends, so it can't be deactivated while the product is being saved.
+     */
+    @Transactional
     public Category requireActive(String slug) {
-        return categoryRepository.findBySlug(slug)
+        return categoryRepository.findForShareBySlug(slug)
                 .filter(Category::isActive)
                 .orElseThrow(() -> new BusinessRuleException("Category is not available"));
     }
@@ -165,8 +168,8 @@ public class CategoryService {
         }
     }
 
-    private Category find(String slug) {
-        return categoryRepository.findBySlug(slug).orElseThrow(() -> NotFoundException.of("Category"));
+    private Category findForUpdate(String slug) {
+        return categoryRepository.findForUpdateBySlug(slug).orElseThrow(() -> NotFoundException.of("Category"));
     }
 
     private static Pageable safePage(Pageable pageable) {

@@ -18,6 +18,8 @@ import com.psar.common.web.PageResponse;
 import com.psar.inventory.dto.response.SupplierSummary;
 import com.psar.inventory.service.SupplierService;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
@@ -46,6 +48,8 @@ public class ProductService {
 
     static final int MAX_PAGE_SIZE = 100;
     private static final String DEFAULT_UNIT = "pcs";
+    /** Postgres' default name for the UNIQUE on products.sku (V2). */
+    private static final String SKU_CONSTRAINT = "products_sku_key";
 
     private final ProductRepository productRepository;
     private final CategoryService categoryService;
@@ -141,7 +145,7 @@ public class ProductService {
         String base = SlugGenerator.slugify(request.name(), sku);
         product.setSlug(SlugGenerator.unique(base, productRepository::existsBySlug));
         // quantity is not set: the DB default 0 applies (Product.quantity is read-only for JPA)
-        return toAdminResponse(productRepository.save(product));
+        return toAdminResponse(saveChecked(product));
     }
 
     /** Everything except quantity (not in the request). The slug is kept so links don't break. */
@@ -152,17 +156,19 @@ public class ProductService {
         if (!sku.equals(product.getSku()) && productRepository.existsBySkuAndIdNot(sku, product.getId())) {
             throw skuTaken();
         }
-        if (!request.categorySlug().equals(product.getCategory().getSlug())) {
-            product.setCategory(categoryService.requireActive(request.categorySlug()));
-        }
+        boolean wasActive = product.isActive();
         product.setSupplierId(resolveSupplierOnUpdate(product.getSupplierId(), request.supplierPublicId()));
         productMapper.update(request, product);
+        // a new category, or reactivating the product, needs an active category
+        if (!request.categorySlug().equals(product.getCategory().getSlug()) || (!wasActive && product.isActive())) {
+            product.setCategory(categoryService.requireActive(request.categorySlug()));
+        }
         product.setSku(sku);
         applyPrices(request, product);
         if (request.unit() != null) {
             product.setUnit(request.unit().trim());
         }
-        return toAdminResponse(productRepository.save(product));
+        return toAdminResponse(saveChecked(product));
     }
 
     /** Soft delete (orders and stock movements keep their reference). Already inactive = no-op. */
@@ -176,6 +182,22 @@ public class ProductService {
     }
 
     // ---- helpers -----------------------------------------------------------------------------
+
+    /**
+     * Flushes now, so a SKU taken by a concurrent request (past the exists check) is a 409 SKU_ALREADY_EXISTS.
+     * A lost race on the slug stays the generic 409 CONFLICT; the retry gets the next free slug.
+     */
+    private Product saveChecked(Product product) {
+        try {
+            return productRepository.saveAndFlush(product);
+        } catch (DataIntegrityViolationException ex) {
+            if (ex.getCause() instanceof ConstraintViolationException cve
+                    && SKU_CONSTRAINT.equals(cve.getConstraintName())) {
+                throw skuTaken();
+            }
+            throw ex;
+        }
+    }
 
     private Product find(UUID publicId) {
         return productRepository.findWithCategoryByPublicId(publicId)

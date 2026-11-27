@@ -15,8 +15,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -84,6 +90,29 @@ class AdminProductControllerTest extends IntegrationTest {
         create(body(sku.toLowerCase(), "Second"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("SKU_ALREADY_EXISTS"));
+    }
+
+    @Test
+    void createProduct_sameSkuConcurrently_oneCreatedOtherSkuConflict() throws Exception {
+        String sku = "RACE-" + shortId().toUpperCase();
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Callable<String> createOne = () -> {
+                start.await();
+                var response = create(body(sku, "Race " + UUID.randomUUID())).andReturn().getResponse();
+                return response.getStatus() + (response.getStatus() == 409
+                        ? " " + read(response.getContentAsString()).get("code").asText() : "");
+            };
+            Future<String> first = pool.submit(createOne);
+            Future<String> second = pool.submit(createOne);
+            start.countDown();
+
+            assertThat(List.of(first.get(), second.get()))
+                    .containsExactlyInAnyOrder("201", "409 SKU_ALREADY_EXISTS");
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test
@@ -155,6 +184,23 @@ class AdminProductControllerTest extends IntegrationTest {
                 .andExpect(jsonPath("$.minStock").value(3))
                 .andExpect(jsonPath("$.active").value(true));
         assertThat(fixtures.quantityOf(product)).isEqualTo(7);
+    }
+
+    @Test
+    void updateProduct_reactivateInInactiveCategory_returns422() throws Exception {
+        Category closed = fixtures.category("Closed " + shortId());
+        Product product = fixtures.product(closed, "Paused", "1.00", 0, 0);
+        mockMvc.perform(delete(ADMIN + "/" + product.getPublicId()).with(TestAuth.asRole(1L, "ADMIN")))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(delete("/api/admin/categories/" + closed.getSlug()).with(TestAuth.asRole(1L, "ADMIN")))
+                .andExpect(status().isNoContent());
+
+        Map<String, Object> body = body(product.getSku(), "Paused");
+        body.put("categorySlug", closed.getSlug());
+        mockMvc.perform(put(ADMIN + "/" + product.getPublicId()).with(TestAuth.asRole(1L, "ADMIN"))
+                        .contentType(APPLICATION_JSON).content(json(body)))
+                .andExpect(status().isUnprocessableEntity());
+        assertThat(productRepository.findById(product.getId()).orElseThrow().isActive()).isFalse();
     }
 
     @Test
