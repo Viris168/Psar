@@ -23,6 +23,8 @@ import com.psar.order.service.delivery.DeliveryQuote;
 import com.psar.order.service.pricing.PricingResult;
 import com.psar.order.service.quote.CheckoutQuoteService;
 import com.psar.order.service.quote.PricedCart;
+import com.psar.payment.dto.response.CustomerPaymentResponse;
+import com.psar.payment.dto.response.PaymentView;
 import com.psar.payment.service.PaymentService;
 import com.psar.user.dto.response.AddressSnapshot;
 import com.psar.user.service.AddressLookupService;
@@ -110,7 +112,7 @@ public class CheckoutService {
         reserve(order, products, userId);
 
         // 7. the payment, PENDING; KHQR gets its code here (generated locally, no network in this transaction)
-        paymentService.createForOrder(order.getId(), order.getOrderNo(), request.paymentMethod().name(),
+        PaymentView payment = paymentService.createForOrder(order.getId(), order.getOrderNo(), request.paymentMethod().name(),
                 order.getTotalAmount(), order.getExpiresAt());
 
         // 8. clear the cart, tell listeners (they run after commit)
@@ -118,7 +120,7 @@ public class CheckoutService {
         events.publishEvent(new OrderPlacedEvent(order.getId()));
 
         // 9.
-        return toResponse(order, products);
+        return toResponse(order, products, CustomerPaymentResponse.of(payment, now));
     }
 
     private Order newOrder(Long userId, CheckoutRequest request, AddressSnapshot address, DeliveryQuote quote,
@@ -186,7 +188,8 @@ public class CheckoutService {
         });
     }
 
-    private static CheckoutResponse toResponse(Order order, Map<Long, SellableProduct> products) {
+    private static CheckoutResponse toResponse(Order order, Map<Long, SellableProduct> products,
+                                               CustomerPaymentResponse payment) {
         List<CheckoutResponse.Line> lines = order.getItems().stream()
                 .map(item -> new CheckoutResponse.Line(products.get(item.getProductId()).publicId(),
                         item.getProductName(), item.getSku(), item.getQuantity(), item.getFreeQuantity(),
@@ -195,6 +198,6 @@ public class CheckoutService {
         return new CheckoutResponse(order.getPublicId(), order.getOrderNo(), order.getStatus(),
                 order.getPaymentMethod(), order.getDeliveryType(), order.getDeliveryCompanyName(), lines,
                 order.getSubtotal(), order.getProductDiscount(), order.getOrderDiscount(), order.getRewardDiscount(),
-                order.getDeliveryFee(), order.getTotalAmount(), order.getExpiresAt(), order.getCreatedAt());
+                order.getDeliveryFee(), order.getTotalAmount(), order.getExpiresAt(), order.getCreatedAt(), payment);
     }
 }

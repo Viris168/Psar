@@ -148,7 +148,8 @@ class CheckoutControllerTest extends IntegrationTest {
         Payment payment = paymentRepository.findByOrderId(order.getId()).orElseThrow();
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
         assertThat(payment.getExpiresAt()).isEqualTo(order.getExpiresAt());
-        assertThat(payment.getQrString()).isNull();
+        assertThat(payment.getQrString()).isNotBlank();
+        assertThat(body.get("payment").get("qrString").asText()).isEqualTo(payment.getQrString());
     }
 
     @Test
