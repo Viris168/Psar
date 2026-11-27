@@ -8,5 +8,9 @@ public enum NotificationType {
     /** Customer: their order moved on (processing, out for delivery, delivered, …). */
     ORDER_STATUS_CHANGED,
     /** Customer: their order was cancelled (by them, staff, or not paid in time). */
-    ORDER_CANCELLED
+    ORDER_CANCELLED,
+    /** Customer: their KHQR payment was received. */
+    ORDER_PAID,
+    /** Admins / managers: money arrived for a cancelled order, refund it by hand. */
+    PAYMENT_LATE
 }

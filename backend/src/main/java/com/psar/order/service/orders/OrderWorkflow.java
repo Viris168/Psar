@@ -10,11 +10,10 @@ import com.psar.order.entity.Order;
 import com.psar.order.entity.OrderItem;
 import com.psar.order.entity.OrderStatus;
 import com.psar.order.entity.OrderStatusHistory;
-import com.psar.order.entity.PaymentStatus;
 import com.psar.order.event.OrderStatusChangedEvent;
 import com.psar.order.repository.OrderRepository;
 import com.psar.order.repository.OrderStatusHistoryRepository;
-import com.psar.order.repository.PaymentRepository;
+import com.psar.payment.service.PaymentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -44,7 +43,7 @@ public class OrderWorkflow {
 
     private final OrderRepository orderRepository;
     private final OrderStatusHistoryRepository historyRepository;
-    private final PaymentRepository paymentRepository;
+    private final PaymentService paymentService;
     private final StockService stockService;
     private final ApplicationEventPublisher events;
     private final Clock clock;
@@ -132,11 +131,6 @@ public class OrderWorkflow {
         if (!quantities.isEmpty()) {
             stockService.release(quantities, order.getId(), actorId);
         }
-        paymentRepository.findByOrderId(order.getId())
-                .filter(payment -> payment.getStatus() == PaymentStatus.PENDING)
-                .ifPresent(payment -> {
-                    payment.setStatus(PaymentStatus.CANCELLED);
-                    paymentRepository.save(payment);
-                });
+        paymentService.cancelPending(order.getId());
     }
 }

@@ -178,7 +178,8 @@ PostgreSQL. **36 application tables** + infrastructure tables (`flyway_schema_hi
 | orders | public_id, order_no, user_id, status, expires_at; delivery snapshot: delivery_type, receiver_name, receiver_phone, province, shipping_address, shipping_latitude, shipping_longitude, shipping_landmark, delivery_company_id, delivery_company_name, courier_branch, tracking_no, assigned_staff_id, assigned_at; money: subtotal, product_discount, order_discount, reward_discount, delivery_fee, total_amount; loyalty: reward_redemption_id, is_member_order, points_earned; note |
 | order_items | order_id, product_id, product_name, quantity, free_quantity, unit_price, discount_amount, line_total |
 | order_status_history | order_id, status, changed_by, note |
-| payments | public_id, payment_type (ORDER/SUBSCRIPTION), order_id \| user_subscription_id (exactly one), method (KHQR/CASH_ON_DELIVERY), amount, currency (USD/KHR), transaction_ref (unique), qr_string, qr_md5, expires_at, raw_webhook (JSONB), status, paid_at |
+| payments | public_id, payment_type (ORDER/SUBSCRIPTION), order_id \| user_subscription_id (exactly one), method (KHQR/CASH_ON_DELIVERY), amount, currency (USD/KHR), transaction_ref (unique), qr_string, qr_md5, expires_at, raw_webhook (JSONB), status, paid_at, provider (BAKONG_KHQR; gateway), provider_ref (KHQR: qr md5), redirect_url, refund_required, refunded_at / _by, refund_reason, last_checked_at, check_attempts |
+| payment_events | payment_id, source (CHECK_JOB/WEBHOOK/SIMULATED), provider, transaction_ref, provider_ref, amount, currency, payload (JSONB), signature_valid, outcome (APPLIED/DUPLICATE/LATE/AMOUNT_MISMATCH/UNKNOWN_PAYMENT/REJECTED) — append-only |
 
 Order statuses: `PENDING_PAYMENT, CONFIRMED, PAID, PROCESSING, OUT_FOR_DELIVERY, HANDED_TO_COURIER, DELIVERED, CANCELLED, REFUNDED`.
 
@@ -253,14 +254,15 @@ V2__catalog_and_inventory.sql   categories, suppliers, products, product_images,
                                 purchase_orders, purchase_order_items
 V3__audit_and_notifications.sql audit_logs, notifications (Phase 3)
 V4__orders_and_payments.sql     carts, cart_items, orders, order_items, order_status_history, payments
-V5__promotions.sql              promotions, promotion_targets, order_promotions
-V6__points_and_rewards.sql      point_rules, point_transactions, rewards, reward_redemptions
+V5__payments_khqr.sql           payments: provider / provider_ref, refunds, check job fields; payment_events (Phase 5)
+V6__promotions.sql              promotions, promotion_targets, order_promotions
+V7__points_and_rewards.sql      point_rules, point_transactions, rewards, reward_redemptions
                                 + ALTER orders ADD FK reward_redemption_id
-V7__subscriptions.sql           subscription_plans, user_subscriptions
+V8__subscriptions.sql           subscription_plans, user_subscriptions
                                 + ALTER payments ADD FK user_subscription_id
-V8__messaging.sql               outbox_events, shedlock (Phase 9)
-V9__ai_chatbot.sql              CREATE EXTENSION vector; chat_*, ai_pending_actions, documents
-V10__reviews.sql                reviews
+V9__messaging.sql               outbox_events (Phase 9; shedlock came with V4)
+V10__ai_chatbot.sql             CREATE EXTENSION vector; chat_*, ai_pending_actions, documents
+V11__reviews.sql                reviews
 ```
 
 ---

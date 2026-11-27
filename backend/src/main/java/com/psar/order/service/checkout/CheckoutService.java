@@ -14,17 +14,16 @@ import com.psar.order.entity.Order;
 import com.psar.order.entity.OrderItem;
 import com.psar.order.entity.OrderStatus;
 import com.psar.order.entity.OrderStatusHistory;
-import com.psar.order.entity.Payment;
 import com.psar.order.entity.PaymentMethod;
 import com.psar.order.event.OrderPlacedEvent;
 import com.psar.order.repository.CartRepository;
 import com.psar.order.repository.OrderRepository;
 import com.psar.order.repository.OrderStatusHistoryRepository;
-import com.psar.order.repository.PaymentRepository;
 import com.psar.order.service.delivery.DeliveryQuote;
 import com.psar.order.service.pricing.PricingResult;
 import com.psar.order.service.quote.CheckoutQuoteService;
 import com.psar.order.service.quote.PricedCart;
+import com.psar.payment.service.PaymentService;
 import com.psar.user.dto.response.AddressSnapshot;
 import com.psar.user.service.AddressLookupService;
 import org.springframework.beans.factory.annotation.Value;
@@ -52,7 +51,7 @@ public class CheckoutService {
     private final CartRepository cartRepository;
     private final OrderRepository orderRepository;
     private final OrderStatusHistoryRepository historyRepository;
-    private final PaymentRepository paymentRepository;
+    private final PaymentService paymentService;
     private final AddressLookupService addressLookupService;
     private final CheckoutQuoteService checkoutQuoteService;
     private final StockService stockService;
@@ -62,14 +61,14 @@ public class CheckoutService {
 
     @SuppressWarnings("java:S107") // one collaborator per checkout step
     public CheckoutService(CartRepository cartRepository, OrderRepository orderRepository,
-                           OrderStatusHistoryRepository historyRepository, PaymentRepository paymentRepository,
+                           OrderStatusHistoryRepository historyRepository, PaymentService paymentService,
                            AddressLookupService addressLookupService, CheckoutQuoteService checkoutQuoteService,
                            StockService stockService, ApplicationEventPublisher events, Clock clock,
                            @Value("${app.order.payment-timeout:PT15M}") Duration paymentTimeout) {
         this.cartRepository = cartRepository;
         this.orderRepository = orderRepository;
         this.historyRepository = historyRepository;
-        this.paymentRepository = paymentRepository;
+        this.paymentService = paymentService;
         this.addressLookupService = addressLookupService;
         this.checkoutQuoteService = checkoutQuoteService;
         this.stockService = stockService;
@@ -110,13 +109,9 @@ public class CheckoutService {
         // 6. reserve stock (409 INSUFFICIENT_STOCK rolls the whole checkout back)
         reserve(order, products, userId);
 
-        // 7. the payment, PENDING (KHQR code comes in Phase 5)
-        Payment payment = new Payment();
-        payment.setOrderId(order.getId());
-        payment.setMethod(request.paymentMethod());
-        payment.setAmount(order.getTotalAmount());
-        payment.setExpiresAt(order.getExpiresAt());
-        paymentRepository.save(payment);
+        // 7. the payment, PENDING; KHQR gets its code here (generated locally, no network in this transaction)
+        paymentService.createForOrder(order.getId(), order.getOrderNo(), request.paymentMethod().name(),
+                order.getTotalAmount(), order.getExpiresAt());
 
         // 8. clear the cart, tell listeners (they run after commit)
         cart.clear();

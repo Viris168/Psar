@@ -6,6 +6,11 @@ spring:
       hibernate:
         format_sql: true
 
+app:
+  payment:
+    simulate:
+      enabled: true                         # demo the whole flow without a bank
+
 logging:
   level:
     com.psar: DEBUG

@@ -10,12 +10,11 @@ import com.psar.order.entity.Order;
 import com.psar.order.entity.OrderItem;
 import com.psar.order.entity.OrderStatus;
 import com.psar.order.entity.OrderStatusHistory;
-import com.psar.order.entity.Payment;
 import com.psar.order.entity.PaymentMethod;
 import com.psar.order.repository.CartRepository;
 import com.psar.order.repository.OrderRepository;
 import com.psar.order.repository.OrderStatusHistoryRepository;
-import com.psar.order.repository.PaymentRepository;
+import com.psar.payment.service.PaymentService;
 import com.psar.user.entity.Address;
 import com.psar.user.entity.Role;
 import com.psar.user.entity.User;
@@ -43,7 +42,8 @@ import java.util.stream.Collectors;
  * Available in every IntegrationTest: {@code @Autowired OrderFixtures orders;}
  * <p>
  * {@link #order} builds an order the way checkout would (snapshot, items, history row, PENDING payment) and
- * reserves its stock through StockService, so cancel / expiry tests see real RESERVE movements.
+ * reserves its stock through StockService, so cancel / expiry tests see real RESERVE movements. The payment is
+ * created by PaymentService exactly as checkout does (KHQR: through the gateway).
  */
 @TestComponent
 @RequiredArgsConstructor
@@ -60,7 +60,7 @@ public class OrderFixtures {
     private final CartRepository cartRepository;
     private final OrderRepository orderRepository;
     private final OrderStatusHistoryRepository historyRepository;
-    private final PaymentRepository paymentRepository;
+    private final PaymentService paymentService;
     private final StockService stockService;
     private final PlatformTransactionManager transactionManager;
     private final Clock clock;
@@ -161,12 +161,8 @@ public class OrderFixtures {
             order = orderRepository.saveAndFlush(order);
 
             historyRepository.save(OrderStatusHistory.of(order.getId(), status, null, null, now));
-            Payment payment = new Payment();
-            payment.setOrderId(order.getId());
-            payment.setMethod(method);
-            payment.setAmount(order.getTotalAmount());
-            payment.setExpiresAt(order.getExpiresAt());
-            paymentRepository.save(payment);
+            paymentService.createForOrder(order.getId(), order.getOrderNo(), method.name(), order.getTotalAmount(),
+                    order.getExpiresAt());
 
             Map<Long, Integer> quantities = lines.entrySet().stream()
                     .collect(Collectors.toMap(e -> e.getKey().getId(), Map.Entry::getValue, Integer::sum,

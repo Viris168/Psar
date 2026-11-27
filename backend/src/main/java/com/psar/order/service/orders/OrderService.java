@@ -11,7 +11,8 @@ import com.psar.order.entity.OrderStatus;
 import com.psar.order.mapper.OrderMapper;
 import com.psar.order.repository.OrderRepository;
 import com.psar.order.repository.OrderStatusHistoryRepository;
-import com.psar.order.repository.PaymentRepository;
+import com.psar.payment.dto.response.PaymentView;
+import com.psar.payment.service.PaymentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -35,7 +36,7 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final OrderStatusHistoryRepository historyRepository;
-    private final PaymentRepository paymentRepository;
+    private final PaymentService paymentService;
     private final OrderWorkflow workflow;
     private final OrderTracking tracking;
     private final OrderMapper orderMapper;
@@ -85,8 +86,8 @@ public class OrderService {
     }
 
     private OrderDetailResponse detail(Order order) {
-        String paymentStatus = paymentRepository.findByOrderId(order.getId())
-                .map(payment -> payment.getStatus().name()).orElse(null);
+        String paymentStatus = paymentService.findForOrder(order.getId())
+                .map(PaymentView::status).orElse(null);
         return orderMapper.toDetail(order, paymentStatus, tracking.url(order),
                 historyRepository.findAllByOrderIdOrderByIdAsc(order.getId()));
     }

@@ -1,4 +1,4 @@
-package com.psar.order.entity;
+package com.psar.payment.entity;
 
 /** SUBSCRIPTION comes in Phase 8. */
 public enum PaymentType {

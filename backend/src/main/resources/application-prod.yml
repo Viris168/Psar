@@ -12,6 +12,16 @@ app:
     secret: ${JWT_SECRET}
   storage:
     cloudinary-url: ${CLOUDINARY_URL}
+  payment:
+    khqr:
+      account-id: ${KHQR_MERCHANT_ID}
+    bakong:
+      mode: ${BAKONG_MODE:bakong}
+      token: ${BAKONG_API_TOKEN}
+    webhook:
+      secret: ${PAYMENT_WEBHOOK_SECRET}
+    simulate:
+      enabled: ${PAYMENT_SIMULATE_ENABLED:false}   # true only for the public demo
     folder: ${STORAGE_FOLDER:psar}
 
 springdoc:

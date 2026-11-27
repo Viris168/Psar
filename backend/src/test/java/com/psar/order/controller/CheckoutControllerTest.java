@@ -8,14 +8,14 @@ import com.psar.order.entity.CartItem;
 import com.psar.order.entity.Order;
 import com.psar.order.entity.OrderStatus;
 import com.psar.order.entity.OrderStatusHistory;
-import com.psar.order.entity.Payment;
 import com.psar.order.entity.PaymentMethod;
-import com.psar.order.entity.PaymentStatus;
 import com.psar.order.repository.CartRepository;
 import com.psar.order.repository.OrderRepository;
 import com.psar.order.repository.OrderStatusHistoryRepository;
-import com.psar.order.repository.PaymentRepository;
 import com.psar.order.service.delivery.DeliveryQuoteService;
+import com.psar.payment.entity.Payment;
+import com.psar.payment.entity.PaymentStatus;
+import com.psar.payment.repository.PaymentRepository;
 import com.psar.support.CatalogFixtures;
 import com.psar.support.IntegrationTest;
 import com.psar.support.OrderFixtures;
@@ -113,7 +113,7 @@ class CheckoutControllerTest extends IntegrationTest {
                 .extracting(OrderStatusHistory::getStatus).containsExactly(OrderStatus.CONFIRMED);
         Payment payment = paymentRepository.findByOrderId(order.getId()).orElseThrow();
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
-        assertThat(payment.getMethod()).isEqualTo(PaymentMethod.CASH_ON_DELIVERY);
+        assertThat(payment.getMethod().name()).isEqualTo("CASH_ON_DELIVERY");
         assertThat(payment.getAmount()).isEqualByComparingTo(order.getTotalAmount());
 
         assertThat(fixtures.quantityOf(rice)).isEqualTo(8);

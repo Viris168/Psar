@@ -16,10 +16,11 @@ import com.psar.order.entity.OrderStatusHistory;
 import com.psar.order.mapper.OrderMapper;
 import com.psar.order.repository.OrderRepository;
 import com.psar.order.repository.OrderStatusHistoryRepository;
-import com.psar.order.repository.PaymentRepository;
 import com.psar.user.dto.response.UserSummary;
 import com.psar.user.service.UserDirectoryService;
 import com.psar.user.service.UserLookupService;
+import com.psar.payment.dto.response.PaymentView;
+import com.psar.payment.service.PaymentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -58,7 +59,7 @@ public class AdminOrderService {
 
     private final OrderRepository orderRepository;
     private final OrderStatusHistoryRepository historyRepository;
-    private final PaymentRepository paymentRepository;
+    private final PaymentService paymentService;
     private final OrderWorkflow workflow;
     private final OrderTracking tracking;
     private final OrderMapper orderMapper;
@@ -220,8 +221,8 @@ public class AdminOrderService {
                 .map(row -> orderMapper.toAdminTimelineEntry(row,
                         row.getChangedBy() == null ? null : users.get(row.getChangedBy())))
                 .toList();
-        String paymentStatus = paymentRepository.findByOrderId(order.getId())
-                .map(payment -> payment.getStatus().name()).orElse(null);
+        String paymentStatus = paymentService.findForOrder(order.getId())
+                .map(PaymentView::status).orElse(null);
         return orderMapper.toAdminDetail(order, paymentStatus, tracking.url(order), users.get(order.getUserId()),
                 order.getAssignedStaffId() == null ? null : users.get(order.getAssignedStaffId()), timeline);
     }

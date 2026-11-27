@@ -49,6 +49,26 @@ app:
       - max-km: 15
         fee: 2.00
       - fee: 3.00
+  payment:
+    khqr:
+      # the shop's Bakong account (e.g. name@bank) shown in every KHQR code
+      account-id: ${KHQR_MERCHANT_ID:psar_shop@devb}
+      merchant-name: ${KHQR_MERCHANT_NAME:Psar Shop}
+      merchant-city: ${KHQR_MERCHANT_CITY:Phnom Penh}
+      currency: USD
+    bakong:
+      mode: ${BAKONG_MODE:fake}             # fake (dev / tests) or bakong (real Open API)
+      base-url: ${BAKONG_BASE_URL:https://api-bakong.nbc.gov.kh}
+      token: ${BAKONG_API_TOKEN:}
+      timeout: PT5S
+    webhook:
+      secret: ${PAYMENT_WEBHOOK_SECRET:}     # empty = every webhook call is rejected
+    simulate:
+      enabled: false                        # "simulate payment": dev / demo only
+    check:
+      min-age: PT1M
+      interval: PT1M
+      late-window: PT30M
   scheduling:
     enabled: ${SCHEDULING_ENABLED:true}   # @Scheduled jobs (with ShedLock); off in tests
   storage:
