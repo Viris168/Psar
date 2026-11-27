@@ -7,15 +7,10 @@ import com.psar.order.entity.OrderStatus;
 import com.psar.order.entity.PaymentMethod;
 import com.psar.payment.dto.response.PaymentView;
 import com.psar.payment.entity.Payment;
-import com.psar.payment.entity.PaymentEventSource;
-import com.psar.payment.entity.PaymentOutcome;
 import com.psar.payment.entity.PaymentProvider;
 import com.psar.payment.entity.PaymentStatus;
 import com.psar.payment.gateway.PaymentGateways;
-import com.psar.payment.repository.PaymentEventRepository;
 import com.psar.payment.repository.PaymentRepository;
-import com.psar.payment.service.confirm.PaymentConfirmation;
-import com.psar.payment.service.confirm.PaymentProcessor;
 import com.psar.support.CatalogFixtures;
 import com.psar.support.IntegrationTest;
 import com.psar.support.OrderFixtures;
@@ -40,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
-/** Proves the Step 0 payment contract: moved tables, gateway routing, fake Bakong, processor first version. */
+/** Proves the Step 0 payment contract: moved tables, gateway routing, fake Bakong. (The processor's rules: PaymentProcessorTest.) */
 class Step0PaymentSchemaTest extends IntegrationTest {
 
     @Autowired
@@ -59,13 +54,7 @@ class Step0PaymentSchemaTest extends IntegrationTest {
     private PaymentGateways gateways;
 
     @Autowired
-    private PaymentProcessor paymentProcessor;
-
-    @Autowired
     private PaymentRepository paymentRepository;
-
-    @Autowired
-    private PaymentEventRepository paymentEventRepository;
 
     @Autowired
     private PlatformTransactionManager transactionManager;
@@ -132,22 +121,6 @@ class Step0PaymentSchemaTest extends IntegrationTest {
             assertThat(paid.transactionRef()).isEqualTo(ref);
             assertThat(paid.amount()).isEqualByComparingTo(order.getTotalAmount());
         });
-    }
-
-    @Test
-    void confirm_step0Version_recordsRejectedEventAndChangesNothing() {
-        Product product = fixtures.product(fixtures.category("Step0 confirm"), "Fish sauce", "1.00", 10, 0);
-        Order order = payments.khqrOrder(Map.of(product, 1));
-        Payment payment = payments.payment(order);
-
-        PaymentOutcome outcome = paymentProcessor.confirm(new PaymentConfirmation(PaymentEventSource.SIMULATED,
-                PaymentProvider.BAKONG_KHQR, payment.getProviderRef(), "REF-1", payment.getAmount(), "USD",
-                clock.instant(), Map.of("test", true), null));
-
-        assertThat(outcome).isEqualTo(PaymentOutcome.REJECTED);
-        assertThat(paymentEventRepository.findAllByProviderRefOrderByIdAsc(payment.getProviderRef()))
-                .singleElement().satisfies(e -> assertThat(e.getOutcome()).isEqualTo(PaymentOutcome.REJECTED));
-        assertThat(payments.payment(order).getStatus()).isEqualTo(PaymentStatus.PENDING);
     }
 
     /**
