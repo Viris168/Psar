@@ -1,5 +1,8 @@
 package com.psar.user.service;
 
+import com.psar.audit.service.AuditEntity;
+import com.psar.audit.service.AuditFields;
+import com.psar.audit.service.AuditService;
 import com.psar.common.exception.BadRequestException;
 import com.psar.common.exception.BusinessRuleException;
 import com.psar.common.exception.ConflictException;
@@ -51,6 +54,7 @@ public class UserAdminService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
+    private final AuditService auditService;
 
     /** {@code role} and {@code q} (part of the email, case-insensitive) are optional filters. */
     @Transactional(readOnly = true)
@@ -98,6 +102,9 @@ public class UserAdminService {
         profile.setPosition(StringUtils.hasText(request.position()) ? request.position().trim() : null);
         userProfileRepository.save(profile);
 
+        auditService.recordCreate(AuditEntity.USER, user.getPublicId().toString(), AuditFields.create()
+                .put("email", email).put("fullName", profile.getFullName()).put("role", user.getRole())
+                .put("position", profile.getPosition()).toMap());
         return userMapper.toResponse(user, profile);
     }
 
@@ -111,7 +118,10 @@ public class UserAdminService {
             }
             assertNotLastActiveAdmin(user);
         }
+        Role previousRole = user.getRole();
         user.setRole(request.role());
+        auditService.recordChanges(AuditEntity.USER, publicId.toString(),
+                AuditFields.create().put("role", previousRole), AuditFields.create().put("role", request.role()));
         return toResponse(userRepository.save(user));
     }
 
@@ -128,7 +138,10 @@ public class UserAdminService {
                 assertNotLastActiveAdmin(user);
             }
         }
+        boolean wasActive = user.isActive();
         user.setActive(request.active());
+        auditService.recordChanges(AuditEntity.USER, publicId.toString(),
+                AuditFields.create().put("active", wasActive), AuditFields.create().put("active", request.active()));
         user = userRepository.save(user);
         if (!request.active()) {
             // flushes the user change first; clears the persistence context afterwards

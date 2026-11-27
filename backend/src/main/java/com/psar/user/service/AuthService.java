@@ -1,5 +1,6 @@
 package com.psar.user.service;
 
+import com.psar.audit.service.AuditService;
 import com.psar.common.exception.BusinessRuleException;
 import com.psar.common.exception.ConflictException;
 import com.psar.common.exception.ErrorCode;
@@ -36,11 +37,16 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class AuthService {
 
+    /** audit_logs LOGIN_FAILED reasons. */
+    static final String LOGIN_BAD_CREDENTIALS = "BAD_CREDENTIALS";
+    static final String LOGIN_ACCOUNT_DISABLED = "ACCOUNT_DISABLED";
+
     private final UserRepository userRepository;
     private final UserProfileRepository userProfileRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
+    private final AuditService auditService;
 
     @Value("${app.jwt.refresh-token-ttl}")
     private Duration refreshTokenTtl;
@@ -74,16 +80,20 @@ public class AuthService {
         Optional<User> found = userRepository.findByEmail(normalizeEmail(request.email()));
         if (found.isEmpty()) {
             passwordEncoder.matches(request.password(), dummyHash());
+            auditService.recordLoginFailed(request.email(), null, LOGIN_BAD_CREDENTIALS);
             throw UnauthorizedException.invalidCredentials();
         }
         User user = found.get();
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            auditService.recordLoginFailed(request.email(), user.getId(), LOGIN_BAD_CREDENTIALS);
             throw UnauthorizedException.invalidCredentials();
         }
         if (!user.isActive()) {
+            auditService.recordLoginFailed(request.email(), user.getId(), LOGIN_ACCOUNT_DISABLED);
             throw ForbiddenException.accountDisabled();
         }
         user.setLastLoginAt(Instant.now());
+        auditService.recordLogin(user.getId(), user.getPublicId().toString(), Map.of("email", user.getEmail()));
         return issueTokens(user);
     }
 

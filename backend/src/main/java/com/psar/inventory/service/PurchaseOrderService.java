@@ -1,5 +1,8 @@
 package com.psar.inventory.service;
 
+import com.psar.audit.service.AuditEntity;
+import com.psar.audit.service.AuditFields;
+import com.psar.audit.service.AuditService;
 import com.psar.catalog.dto.response.ProductStockInfo;
 import com.psar.common.exception.BadRequestException;
 import com.psar.common.exception.BusinessRuleException;
@@ -57,6 +60,7 @@ public class PurchaseOrderService {
     private final StockService stockService;
     private final PurchaseOrderMapper purchaseOrderMapper;
     private final StockMapper stockMapper;
+    private final AuditService auditService;
 
     @Transactional(readOnly = true)
     public PageResponse<PurchaseOrderResponse> list(PurchaseOrderStatus status, UUID supplierPublicId,
@@ -107,7 +111,15 @@ public class PurchaseOrderService {
             total = total.add(item.lineTotal());
         }
         po.setTotalAmount(total.setScale(2, RoundingMode.HALF_UP));
-        return toDetail(purchaseOrderRepository.saveAndFlush(po));
+        po = purchaseOrderRepository.saveAndFlush(po);
+        auditService.recordCreate(AuditEntity.PURCHASE_ORDER, po.getPoNo(), AuditFields.create()
+                .put("supplierPublicId", supplier.getPublicId()).put("supplierName", supplier.getName())
+                .put("totalAmount", po.getTotalAmount()).put("note", po.getNote())
+                .put("items", request.items().stream().map(line -> AuditFields.create()
+                        .put("productPublicId", line.productPublicId()).put("quantity", line.quantity())
+                        .put("unitCost", line.unitCost()).toMap()).toList())
+                .toMap());
+        return toDetail(po);
     }
 
     /** PENDING only: adds every item to stock (one IN movement each) and marks the PO RECEIVED. */
@@ -124,6 +136,9 @@ public class PurchaseOrderService {
         }
         po.setStatus(PurchaseOrderStatus.RECEIVED);
         po.setReceivedAt(Instant.now());
+        auditService.recordChanges(AuditEntity.PURCHASE_ORDER, poNo,
+                AuditFields.create().put("status", PurchaseOrderStatus.PENDING),
+                AuditFields.create().put("status", po.getStatus()));
         return toDetail(po);
     }
 
@@ -133,6 +148,9 @@ public class PurchaseOrderService {
         PurchaseOrder po = lockPending(poNo, "cancelled");
         po.setStatus(PurchaseOrderStatus.CANCELLED);
         po.setCancelledAt(Instant.now());
+        auditService.recordChanges(AuditEntity.PURCHASE_ORDER, poNo,
+                AuditFields.create().put("status", PurchaseOrderStatus.PENDING),
+                AuditFields.create().put("status", po.getStatus()));
         return toDetail(po);
     }
 

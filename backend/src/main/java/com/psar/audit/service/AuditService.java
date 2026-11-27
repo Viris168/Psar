@@ -43,6 +43,38 @@ public class AuditService {
         save(currentUserId(), action, entity, entityId, details);
     }
 
+    // Other modules can't use audit.entity (ArchUnit), so they call these instead of passing an AuditAction.
+
+    /** A CREATE row by the logged-in user; {@code details} = the main fields. Runs in the caller's transaction. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void recordCreate(String entity, String entityId, Map<String, Object> details) {
+        save(currentUserId(), AuditAction.CREATE, entity, entityId, details);
+    }
+
+    /** A DELETE row by the logged-in user; {@code details} = name / SKU so it still reads well. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void recordDelete(String entity, String entityId, Map<String, Object> details) {
+        save(currentUserId(), AuditAction.DELETE, entity, entityId, details);
+    }
+
+    /** A successful login ({@link #AUTH}); the user isn't in the security context yet. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void recordLogin(Long userId, String userPublicId, Map<String, Object> details) {
+        save(userId, AuditAction.LOGIN, AUTH, userPublicId, details);
+    }
+
+    /**
+     * An UPDATE row with only the fields that differ between the two snapshots ({@link AuditChanges});
+     * nothing changed → no row. Must run inside the caller's transaction.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void recordChanges(String entity, String entityId, AuditFields before, AuditFields after) {
+        Map<String, Object> changes = AuditChanges.between(before, after);
+        if (!changes.isEmpty()) {
+            save(currentUserId(), AuditAction.UPDATE, entity, entityId, changes);
+        }
+    }
+
     /** Like {@link #record}, for an actor who isn't in the security context yet (a successful login). */
     @Transactional(propagation = Propagation.MANDATORY)
     public void recordAs(Long userId, AuditAction action, String entity, String entityId,

@@ -1,5 +1,8 @@
 package com.psar.catalog.service;
 
+import com.psar.audit.service.AuditEntity;
+import com.psar.audit.service.AuditFields;
+import com.psar.audit.service.AuditService;
 import com.psar.catalog.dto.request.CategoryRequest;
 import com.psar.catalog.dto.response.AdminCategoryResponse;
 import com.psar.catalog.dto.response.CategoryTreeResponse;
@@ -43,6 +46,7 @@ public class CategoryService {
     private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
     private final CategoryMapper categoryMapper;
+    private final AuditService auditService;
 
     /** Storefront: active top-level categories, each with its active subcategories. */
     @Transactional(readOnly = true)
@@ -79,12 +83,15 @@ public class CategoryService {
         }
         String base = SlugGenerator.slugify(request.name(), FALLBACK_SLUG);
         category.setSlug(SlugGenerator.unique(base, categoryRepository::existsBySlug));
-        return categoryMapper.toAdminResponse(categoryRepository.save(category));
+        category = categoryRepository.save(category);
+        auditService.recordCreate(AuditEntity.CATEGORY, category.getSlug(), auditFields(category).toMap());
+        return categoryMapper.toAdminResponse(category);
     }
 
     @Transactional
     public AdminCategoryResponse update(String slug, CategoryRequest request) {
         Category category = findForUpdate(slug);
+        AuditFields before = auditFields(category);
         boolean wasActive = category.isActive();
         Category parent = resolveParent(request.parentSlug(), category);
         categoryMapper.update(request, category);
@@ -95,6 +102,7 @@ public class CategoryService {
         if (category.isActive() && parent != null && !parent.isActive()) {
             throw new BusinessRuleException("Parent category is not active");
         }
+        auditService.recordChanges(AuditEntity.CATEGORY, slug, before, auditFields(category));
         return categoryMapper.toAdminResponse(categoryRepository.save(category));
     }
 
@@ -108,6 +116,8 @@ public class CategoryService {
         assertCanDeactivate(category);
         category.setActive(false);
         categoryRepository.save(category);
+        auditService.recordDelete(AuditEntity.CATEGORY, slug,
+                AuditFields.create().put("name", category.getName()).toMap());
     }
 
     // ---- used by ProductService --------------------------------------------------------------
@@ -166,6 +176,13 @@ public class CategoryService {
         if (categoryRepository.existsByParentIdAndActiveTrue(category.getId())) {
             throw new BusinessRuleException("Category still has active subcategories");
         }
+    }
+
+    private static AuditFields auditFields(Category category) {
+        return AuditFields.create().put("name", category.getName()).put("nameKh", category.getNameKh())
+                .put("parentSlug", category.getParent() == null ? null : category.getParent().getSlug())
+                .put("imageUrl", category.getImageUrl()).put("sortOrder", category.getSortOrder())
+                .put("active", category.isActive());
     }
 
     private Category findForUpdate(String slug) {
