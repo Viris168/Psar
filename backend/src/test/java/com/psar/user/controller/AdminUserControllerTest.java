@@ -22,6 +22,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -90,6 +91,22 @@ class AdminUserControllerTest extends IntegrationTest {
     }
 
     @Test
+    void list_usersWithProfiles_includesFullNameAndPosition() throws Exception {
+        String tag = "nm" + shortId();
+        User driver = saveUser(Role.STAFF, tag + "-driver@test.local");
+        saveProfile(driver, "Chan Vuthy", "Driver");
+        User noProfile = saveUser(Role.STAFF, tag + "-noprofile@test.local");
+
+        mockMvc.perform(get(USERS).with(TestAuth.asRole(1L, "ADMIN")).param("q", tag).param("sort", "email,asc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].publicId").value(driver.getPublicId().toString()))
+                .andExpect(jsonPath("$.content[0].fullName").value("Chan Vuthy"))
+                .andExpect(jsonPath("$.content[0].position").value("Driver"))
+                .andExpect(jsonPath("$.content[1].publicId").value(noProfile.getPublicId().toString()))
+                .andExpect(jsonPath("$.content[1].fullName").value(nullValue()));
+    }
+
+    @Test
     void list_hugePageSizeAndUnknownSort_capsAt100AndIgnoresSort() throws Exception {
         mockMvc.perform(get(USERS).with(TestAuth.asRole(1L, "ADMIN"))
                         .param("size", "500").param("sort", "passwordHash,asc"))
@@ -100,11 +117,13 @@ class AdminUserControllerTest extends IntegrationTest {
     @Test
     void get_existingUser_returnsUser() throws Exception {
         User user = saveUser(Role.CUSTOMER, "get-" + shortId() + "@test.local");
+        saveProfile(user, "Sok Dara", null);
 
         mockMvc.perform(get(USERS + "/" + user.getPublicId()).with(TestAuth.asRole(1L, "ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(user.getEmail()))
                 .andExpect(jsonPath("$.role").value("CUSTOMER"))
+                .andExpect(jsonPath("$.fullName").value("Sok Dara"))
                 .andExpect(jsonPath("$.active").value(true));
     }
 
@@ -311,6 +330,14 @@ class AdminUserControllerTest extends IntegrationTest {
         user.setPasswordHash("not-used");
         user.setRole(role);
         return userRepository.save(user);
+    }
+
+    private void saveProfile(User user, String fullName, String position) {
+        UserProfile profile = new UserProfile();
+        profile.setUser(user);
+        profile.setFullName(fullName);
+        profile.setPosition(position);
+        userProfileRepository.save(profile);
     }
 
     private void saveRefreshToken(User user) {

@@ -19,6 +19,7 @@ import com.psar.user.repository.RefreshTokenRepository;
 import com.psar.user.repository.UserProfileRepository;
 import com.psar.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -32,6 +33,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /** Admin account management: list, create staff accounts, change role, enable/disable. */
 @Service
@@ -60,12 +63,16 @@ public class UserAdminService {
             String pattern = "%" + escapeLike(q.trim().toLowerCase(Locale.ROOT)) + "%";
             spec = spec.and((root, query, cb) -> cb.like(root.get("email"), pattern, '\\'));
         }
-        return PageResponse.from(userRepository.findAll(spec, safePage(pageable)).map(userMapper::toResponse));
+        Page<User> users = userRepository.findAll(spec, safePage(pageable));
+        Map<Long, UserProfile> profiles = userProfileRepository
+                .findAllByUserIdIn(users.map(User::getId).getContent()).stream()
+                .collect(Collectors.toMap(profile -> profile.getUser().getId(), Function.identity()));
+        return PageResponse.from(users.map(user -> userMapper.toResponse(user, profiles.get(user.getId()))));
     }
 
     @Transactional(readOnly = true)
     public UserResponse get(UUID publicId) {
-        return userMapper.toResponse(find(publicId));
+        return toResponse(find(publicId));
     }
 
     @Transactional
@@ -91,7 +98,7 @@ public class UserAdminService {
         profile.setPosition(StringUtils.hasText(request.position()) ? request.position().trim() : null);
         userProfileRepository.save(profile);
 
-        return userMapper.toResponse(user);
+        return userMapper.toResponse(user, profile);
     }
 
     @Transactional
@@ -105,7 +112,7 @@ public class UserAdminService {
             assertNotLastActiveAdmin(user);
         }
         user.setRole(request.role());
-        return userMapper.toResponse(userRepository.save(user));
+        return toResponse(userRepository.save(user));
     }
 
     /** Disabling also revokes every refresh token, so the user is logged out everywhere. */
@@ -127,7 +134,7 @@ public class UserAdminService {
             // flushes the user change first; clears the persistence context afterwards
             refreshTokenRepository.revokeAllByUserId(user.getId());
         }
-        return userMapper.toResponse(user);
+        return toResponse(user);
     }
 
     private void assertNotLastActiveAdmin(User target) {
@@ -140,6 +147,10 @@ public class UserAdminService {
 
     private static boolean isSelf(AuthenticatedUser me, User user) {
         return me != null && user.getId().equals(me.userId());
+    }
+
+    private UserResponse toResponse(User user) {
+        return userMapper.toResponse(user, userProfileRepository.findByUserId(user.getId()).orElse(null));
     }
 
     private User find(UUID publicId) {
