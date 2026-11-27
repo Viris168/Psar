@@ -297,7 +297,7 @@ change? Ask the lead. Before finishing: `cd backend && ./mvnw test` passes; endp
 ## Done when
 
 - [x] Step 0 merged
-- [ ] Agent C merged
-- [ ] Agent B merged
-- [ ] Agent A merged
-- [ ] End-to-end test passes (incl. 10 buyers / 3 left at the API level); `CLAUDE.md` "Current phase" → Phase 4 done
+- [x] Agent C merged
+- [x] Agent B merged
+- [x] Agent A merged
+- [x] End-to-end test passes (incl. 10 buyers / 3 left at the API level); `CLAUDE.md` "Current phase" → Phase 4 done
