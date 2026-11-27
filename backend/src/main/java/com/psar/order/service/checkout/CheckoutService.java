@@ -1,7 +1,6 @@
 package com.psar.order.service.checkout;
 
 import com.psar.catalog.dto.response.SellableProduct;
-import com.psar.catalog.service.ProductCatalogService;
 import com.psar.common.exception.BusinessRuleException;
 import com.psar.common.exception.ConflictException;
 import com.psar.common.exception.ErrorCode;
@@ -23,10 +22,9 @@ import com.psar.order.repository.OrderRepository;
 import com.psar.order.repository.OrderStatusHistoryRepository;
 import com.psar.order.repository.PaymentRepository;
 import com.psar.order.service.delivery.DeliveryQuote;
-import com.psar.order.service.delivery.DeliveryQuoteService;
-import com.psar.order.service.pricing.PricingCalculator;
-import com.psar.order.service.pricing.PricingInput;
 import com.psar.order.service.pricing.PricingResult;
+import com.psar.order.service.quote.CheckoutQuoteService;
+import com.psar.order.service.quote.PricedCart;
 import com.psar.user.dto.response.AddressSnapshot;
 import com.psar.user.service.AddressLookupService;
 import org.springframework.beans.factory.annotation.Value;
@@ -55,10 +53,8 @@ public class CheckoutService {
     private final OrderRepository orderRepository;
     private final OrderStatusHistoryRepository historyRepository;
     private final PaymentRepository paymentRepository;
-    private final ProductCatalogService productCatalogService;
     private final AddressLookupService addressLookupService;
-    private final DeliveryQuoteService deliveryQuoteService;
-    private final PricingCalculator pricingCalculator;
+    private final CheckoutQuoteService checkoutQuoteService;
     private final StockService stockService;
     private final ApplicationEventPublisher events;
     private final Clock clock;
@@ -67,18 +63,15 @@ public class CheckoutService {
     @SuppressWarnings("java:S107") // one collaborator per checkout step
     public CheckoutService(CartRepository cartRepository, OrderRepository orderRepository,
                            OrderStatusHistoryRepository historyRepository, PaymentRepository paymentRepository,
-                           ProductCatalogService productCatalogService, AddressLookupService addressLookupService,
-                           DeliveryQuoteService deliveryQuoteService, PricingCalculator pricingCalculator,
+                           AddressLookupService addressLookupService, CheckoutQuoteService checkoutQuoteService,
                            StockService stockService, ApplicationEventPublisher events, Clock clock,
                            @Value("${app.order.payment-timeout:PT15M}") Duration paymentTimeout) {
         this.cartRepository = cartRepository;
         this.orderRepository = orderRepository;
         this.historyRepository = historyRepository;
         this.paymentRepository = paymentRepository;
-        this.productCatalogService = productCatalogService;
         this.addressLookupService = addressLookupService;
-        this.deliveryQuoteService = deliveryQuoteService;
-        this.pricingCalculator = pricingCalculator;
+        this.checkoutQuoteService = checkoutQuoteService;
         this.stockService = stockService;
         this.events = events;
         this.clock = clock;
@@ -96,27 +89,13 @@ public class CheckoutService {
                 .toList();
         AddressSnapshot address = addressLookupService.requireOwned(userId, request.addressPublicId());
 
-        // 2. current products and prices from the database
-        Map<Long, SellableProduct> products = productCatalogService.sellable(
-                cartItems.stream().map(CartItem::getProductId).toList());
-        for (CartItem item : cartItems) {
-            SellableProduct product = products.get(item.getProductId());
-            if (product == null || !product.purchasable()) {
-                String name = product == null ? "A product in your cart" : product.name();
-                throw new BusinessRuleException(name + " is no longer available; remove it from your cart");
-            }
-        }
-
-        // 3. delivery rules and fee (422 on violations)
-        DeliveryQuote quote = deliveryQuoteService.quote(address, request.paymentMethod());
-
-        // 4. price
-        PricingResult price = pricingCalculator.price(new PricingInput(
-                cartItems.stream()
-                        .map(item -> new PricingInput.Line(item.getProductId(), item.getQuantity(),
-                                products.get(item.getProductId()).sellPrice()))
-                        .toList(),
-                quote.fee()));
+        // 2–4. current prices from the database, delivery rules and fee (422), pricing: the same code the quote
+        // uses, so what the customer was quoted is what they pay
+        PricedCart priced = checkoutQuoteService.price(
+                CheckoutQuoteService.quantities(cartItems), address, request.paymentMethod());
+        Map<Long, SellableProduct> products = priced.products();
+        DeliveryQuote quote = priced.delivery();
+        PricingResult price = priced.pricing();
 
         // 5. the order with its snapshots, items and first history row
         Instant now = clock.instant();
