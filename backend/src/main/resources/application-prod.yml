@@ -11,11 +11,8 @@ app:
   jwt:
     secret: ${JWT_SECRET}
   storage:
-    endpoint: ${STORAGE_ENDPOINT}
-    bucket: ${STORAGE_BUCKET}
-    access-key: ${STORAGE_ACCESS_KEY}
-    secret-key: ${STORAGE_SECRET_KEY}
-    public-url: ${STORAGE_PUBLIC_URL}
+    cloudinary-url: ${CLOUDINARY_URL}
+    folder: ${STORAGE_FOLDER:psar}
 
 springdoc:
   swagger-ui:

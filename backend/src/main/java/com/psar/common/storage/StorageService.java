@@ -8,17 +8,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.services.s3.S3Client;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.util.UUID;
 
 /**
- * Files in the S3-compatible bucket (product images now; avatars, delivery logos and AI documents later).
- * Keys are {@code {folder}/{uuid}.{ext}}: the user's file name is never used.
+ * Stored files (product images now; avatars, delivery logos and AI documents later): checks uploads,
+ * then hands the bytes to the {@link FileStore}. Files are named {@code {folder}/{uuid}}: the user's file name
+ * is never used.
  */
 @Slf4j
 @Service
@@ -27,8 +25,7 @@ public class StorageService {
 
     public static final long MAX_IMAGE_BYTES = 5L * 1024 * 1024;
 
-    private final S3Client s3;
-    private final StorageProperties properties;
+    private final FileStore fileStore;
     private final ApplicationEventPublisher events;
 
     /**
@@ -44,22 +41,17 @@ public class StorageService {
         if (file.getSize() > MAX_IMAGE_BYTES) {
             throw InvalidFileException.tooLarge(MAX_IMAGE_BYTES);
         }
-        ImageType type = ImageType.detect(head(file)).orElseThrow(InvalidFileException::unsupportedType);
+        byte[] content = bytes(file);
+        ImageType type = ImageType.detect(content).orElseThrow(InvalidFileException::unsupportedType);
 
-        String key = folder + "/" + UUID.randomUUID() + "." + type.extension();
-        try (InputStream in = file.getInputStream()) {
-            s3.putObject(b -> b.bucket(properties.bucket()).key(key).contentType(type.contentType()),
-                    RequestBody.fromInputStream(in, file.getSize()));
-        } catch (IOException ex) {
-            throw new UncheckedIOException("Could not read uploaded file", ex);
-        }
-        deleteIfRolledBack(key);
-        return new StoredFile(key, properties.urlOf(key));
+        StoredFile stored = fileStore.put(folder + "/" + UUID.randomUUID(), content, type);
+        deleteIfRolledBack(stored.key());
+        return stored;
     }
 
     /** Deletes now. Inside a transaction, prefer {@link #deleteAfterCommit}. Deleting a missing key is a no-op. */
     public void delete(String key) {
-        s3.deleteObject(b -> b.bucket(properties.bucket()).key(key));
+        fileStore.delete(key);
     }
 
     /** Deletes the file after the current transaction commits (immediately if there is none). */
@@ -67,9 +59,10 @@ public class StorageService {
         events.publishEvent(new FileDeletionRequestedEvent(key));
     }
 
-    private static byte[] head(MultipartFile file) {
-        try (InputStream in = file.getInputStream()) {
-            return in.readNBytes(ImageType.SIGNATURE_LENGTH);
+    /** At most {@link #MAX_IMAGE_BYTES}, checked before this is called. */
+    private static byte[] bytes(MultipartFile file) {
+        try {
+            return file.getBytes();
         } catch (IOException ex) {
             throw new UncheckedIOException("Could not read uploaded file", ex);
         }

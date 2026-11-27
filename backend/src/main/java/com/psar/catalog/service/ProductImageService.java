@@ -54,7 +54,7 @@ public class ProductImageService {
             throw new BusinessRuleException("A product can have at most " + MAX_IMAGES + " images");
         }
 
-        // validated (415/413) here; removed again from the bucket if this transaction rolls back
+        // validated (415/413) here; removed again from storage if this transaction rolls back
         StoredFile stored = storageService.upload(FOLDER, file);
 
         ProductImage image = new ProductImage();

@@ -1,4 +1,4 @@
-# Local development (docker compose up -d postgres rabbitmq minio)
+# Local development (docker compose up -d postgres rabbitmq)
 spring:
   jpa:
     show-sql: false
@@ -10,7 +10,3 @@ logging:
   level:
     com.psar: DEBUG
     org.hibernate.SQL: INFO
-
-app:
-  storage:
-    create-bucket: true

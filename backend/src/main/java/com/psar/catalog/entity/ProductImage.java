@@ -31,7 +31,7 @@ public class ProductImage extends BaseEntity {
     @Column(name = "image_url", nullable = false, length = 500)
     private String imageUrl;
 
-    /** Object key in the bucket, used to delete the file. Never returned to clients. */
+    /** Storage key (Cloudinary public ID), used to delete the file. Never returned to clients. */
     @Column(name = "storage_key", nullable = false)
     private String storageKey;
 

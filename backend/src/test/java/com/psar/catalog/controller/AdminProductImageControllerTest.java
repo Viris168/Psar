@@ -5,8 +5,9 @@ import com.psar.catalog.entity.Category;
 import com.psar.catalog.entity.Product;
 import com.psar.catalog.entity.ProductImage;
 import com.psar.catalog.repository.ProductImageRepository;
-import com.psar.common.storage.StorageProperties;
+import com.psar.common.storage.ImageType;
 import com.psar.support.CatalogFixtures;
+import com.psar.support.InMemoryFileStore;
 import com.psar.support.IntegrationTest;
 import com.psar.support.TestAuth;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,8 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -24,7 +23,6 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -46,9 +44,7 @@ class AdminProductImageControllerTest extends IntegrationTest {
     @Autowired
     private ProductImageRepository imageRepository;
     @Autowired
-    private S3Client s3;
-    @Autowired
-    private StorageProperties storage;
+    private InMemoryFileStore files;
 
     private Product product;
 
@@ -59,17 +55,16 @@ class AdminProductImageControllerTest extends IntegrationTest {
     }
 
     @Test
-    void uploadImage_firstImage_becomesMainAndFileIsInBucket() throws Exception {
+    void uploadImage_firstImage_becomesMainAndFileIsStored() throws Exception {
         JsonNode body = read(upload(png("cover.png")).andExpect(status().isCreated())
                 .andExpect(jsonPath("$.main").value(true))
                 .andExpect(jsonPath("$.sortOrder").value(0)));
 
         ProductImage saved = image(body);
-        assertThat(saved.getStorageKey()).matches("products/[0-9a-f-]{36}\\.png");
-        assertThat(body.get("imageUrl").asText()).isEqualTo(storage.urlOf(saved.getStorageKey()));
+        assertThat(saved.getStorageKey()).matches("products/[0-9a-f-]{36}");
+        assertThat(body.get("imageUrl").asText()).isEqualTo(InMemoryFileStore.urlOf(saved.getStorageKey(), ImageType.PNG));
         assertThat(body.has("storageKey")).isFalse();
-        assertThat(s3.headObject(b -> b.bucket(storage.bucket()).key(saved.getStorageKey())).contentType())
-                .isEqualTo("image/png");
+        assertThat(files.typeOf(saved.getStorageKey())).contains(ImageType.PNG);
 
         // second image is not main and goes after the first
         upload(jpeg("second.jpg")).andExpect(status().isCreated())
@@ -93,7 +88,7 @@ class AdminProductImageControllerTest extends IntegrationTest {
     void uploadImage_pngRenamedToTxt_acceptedBySignature() throws Exception {
         JsonNode body = read(upload(new MockMultipartFile("file", "notes.txt", "text/plain", bytes(PNG_MAGIC, 64)))
                 .andExpect(status().isCreated()));
-        assertThat(image(body).getStorageKey()).endsWith(".png");
+        assertThat(files.typeOf(image(body).getStorageKey())).contains(ImageType.PNG);
 
         assertThat(imageRepository.countByProductId(product.getId())).isEqualTo(1);
     }
@@ -105,7 +100,7 @@ class AdminProductImageControllerTest extends IntegrationTest {
         System.arraycopy("WEBP".getBytes(StandardCharsets.US_ASCII), 0, webp, 8, 4);
         JsonNode body = read(upload(new MockMultipartFile("file", "a.webp", "image/webp", webp))
                 .andExpect(status().isCreated()));
-        assertThat(image(body).getStorageKey()).endsWith(".webp");
+        assertThat(files.typeOf(image(body).getStorageKey())).contains(ImageType.WEBP);
     }
 
     @Test
@@ -153,10 +148,9 @@ class AdminProductImageControllerTest extends IntegrationTest {
         assertThat(imageRepository.findById(first.getId())).isEmpty();
         assertThat(imageRepository.findById(third.getId()).orElseThrow().isMain()).isTrue();
         assertThat(imageRepository.findById(second.getId()).orElseThrow().isMain()).isFalse();
-        assertThatThrownBy(() -> s3.headObject(b -> b.bucket(storage.bucket()).key(first.getStorageKey())))
-                .isInstanceOf(NoSuchKeyException.class);
+        assertThat(files.typeOf(first.getStorageKey())).isEmpty();
         // the other files stay
-        s3.headObject(b -> b.bucket(storage.bucket()).key(third.getStorageKey()));
+        assertThat(files.typeOf(third.getStorageKey())).isPresent();
     }
 
     @Test

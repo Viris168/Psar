@@ -10,14 +10,14 @@ An online store for Cambodia with inventory, promotions, points, subscriptions a
 ```
 React (storefront + admin) ──JWT──► Spring Boot monolith ──► PostgreSQL (+PGVector)
                                         │   ├──► outbox ─► RabbitMQ ─► consumers (same app)
-                                        │   ├──► MinIO / S3
+                                        │   ├──► Cloudinary
                                         │   └──► Spring AI ─► Gemini
                           KHQR webhook ─┘   @Scheduled jobs (ShedLock)
 ```
 
 ## Stack
 
-Java 21 · Spring Boot 3 · Maven · PostgreSQL · Flyway · Spring Security + JWT · MapStruct · Lombok · SpringDoc · RabbitMQ · ShedLock · Spring AI + Gemini · PGVector · MinIO/S3 · React + TS + Vite · Tailwind + shadcn/ui · TanStack Query · Leaflet · JUnit 5 + Mockito + Testcontainers · Docker Compose · GitHub Actions · Render + Vercel
+Java 21 · Spring Boot 3 · Maven · PostgreSQL · Flyway · Spring Security + JWT · MapStruct · Lombok · SpringDoc · RabbitMQ · ShedLock · Spring AI + Gemini · PGVector · Cloudinary · React + TS + Vite · Tailwind + shadcn/ui · TanStack Query · Leaflet · JUnit 5 + Mockito + Testcontainers · Docker Compose · GitHub Actions · Render + Vercel
 
 ## Modules
 

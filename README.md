@@ -32,7 +32,7 @@ psar/
 │       └── PsarApplication.java
 ├── frontend/                    React + Vite
 │   └── src/ app/ api/ components/ features/ hooks/ i18n/ lib/ types/
-├── docker-compose.yml           postgres, rabbitmq, minio, backend, frontend
+├── docker-compose.yml           postgres, rabbitmq, backend, frontend
 └── .github/workflows/ci.yml
 ```
 
@@ -41,8 +41,8 @@ psar/
 Requirements: Java 21, Maven 3.9+, Node 22, Docker.
 
 ```bash
-cp .env.example .env                              # fill in JWT_SECRET
-docker compose up -d postgres rabbitmq minio      # infrastructure
+cp .env.example .env                              # fill in JWT_SECRET (and CLOUDINARY_URL for image uploads)
+docker compose up -d postgres rabbitmq            # infrastructure
 
 cd backend && mvn spring-boot:run                 # http://localhost:8080
 cd frontend && npm install && npm run dev         # http://localhost:5173
@@ -57,7 +57,6 @@ Or run everything in Docker: `docker compose up --build` → http://localhost:30
 | Swagger UI | http://localhost:8080/swagger-ui.html |
 | Health | http://localhost:8080/actuator/health |
 | RabbitMQ UI | http://localhost:15672 (psar / psar) |
-| MinIO console | http://localhost:9001 (minioadmin / minioadmin) |
 
 ### Optional: Maven wrapper
 

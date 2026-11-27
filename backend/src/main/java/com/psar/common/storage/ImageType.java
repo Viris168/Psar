@@ -34,7 +34,7 @@ public enum ImageType {
         return contentType;
     }
 
-    /** @param head the first bytes of the file (may be shorter than {@link #SIGNATURE_LENGTH}) */
+    /** @param head the file, or at least its first bytes (may be shorter than {@link #SIGNATURE_LENGTH}) */
     public static Optional<ImageType> detect(byte[] head) {
         if (startsWith(head, 0, JPEG_MAGIC)) {
             return Optional.of(JPEG);

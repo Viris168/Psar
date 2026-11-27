@@ -22,7 +22,7 @@ See `PRD.md` for product requirements and `essential-architecture.md` for the on
 | API docs | SpringDoc OpenAPI (Swagger UI) |
 | Messaging | RabbitMQ (Spring AMQP) — Spring events before Phase 9 |
 | Scheduling | Spring `@Scheduled` + ShedLock |
-| File storage | MinIO locally, S3-compatible storage in production |
+| File storage | Cloudinary (separate root folders for dev and production) |
 | AI | Spring AI + Google Gemini (chat + embeddings), Ollama for local testing |
 | Frontend | React + TypeScript + Vite, Tailwind CSS + shadcn/ui, Axios + TanStack Query, Recharts |
 | Maps | Leaflet + react-leaflet + OpenStreetMap, Nominatim reverse geocoding |
@@ -49,7 +49,7 @@ See `PRD.md` for product requirements and `essential-architecture.md` for the on
 │        │                  │                                                        │
 │        │                  ├─► outbox_events ──(relay)──► RabbitMQ ──► @RabbitListener
 │        │                  │                                    (same app)          │
-│        │                  └─► MinIO / S3 (images, PDFs)                            │
+│        │                  └─► Cloudinary (images, PDFs)                            │
 │        │                                                                           │
 │        ├─► SSE stream ◄── Spring AI ◄──► Gemini API                                │
 │        │                                                                           │
@@ -425,7 +425,7 @@ React chat ─SSE─► ChatController ─► Spring AI ChatClient
 ### 9.1 Local (Docker Compose)
 
 ```
-services: postgres (pgvector image), rabbitmq (management), minio, backend, frontend
+services: postgres (pgvector image), rabbitmq (management), backend, frontend
 ```
 
 ### 9.2 Production (portfolio)
@@ -436,7 +436,7 @@ services: postgres (pgvector image), rabbitmq (management), minio, backend, fron
 | Backend | Render (Docker) |
 | PostgreSQL | Render PostgreSQL (with pgvector) |
 | RabbitMQ | Hosted RabbitMQ (free tier) or a container |
-| Files | S3-compatible storage (e.g. Cloudflare R2) |
+| Files | Cloudinary |
 
 ### 9.3 CI/CD (GitHub Actions)
 

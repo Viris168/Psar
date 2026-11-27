@@ -37,14 +37,10 @@ app:
   order:
     payment-timeout: PT15M
   storage:
-    endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
-    bucket: ${STORAGE_BUCKET:psar}
-    access-key: ${STORAGE_ACCESS_KEY:minioadmin}
-    secret-key: ${STORAGE_SECRET_KEY:minioadmin}
-    region: ${STORAGE_REGION:us-east-1}       # "auto" for Cloudflare R2
-    # base URL that clients load files from (bucket URL or CDN), file URL = public-url + "/" + key
-    public-url: ${STORAGE_PUBLIC_URL:${app.storage.endpoint}/${app.storage.bucket}}
-    create-bucket: false                      # dev only: create the bucket (public read) on startup
+    # cloudinary://<api-key>:<api-secret>@<cloud-name> (Cloudinary console → API Keys). Empty: the app
+    # still starts, only uploads fail.
+    cloudinary-url: ${CLOUDINARY_URL:}
+    folder: ${STORAGE_FOLDER:psar-dev}         # root folder in Cloudinary, so dev and prod files stay apart
 
 management:
   endpoints:

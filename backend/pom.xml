@@ -26,20 +26,8 @@
         <archunit.version>1.4.1</archunit.version>
         <!-- 1.21.4+ negotiates Docker API version; 1.21.3 (Boot default) fails on Docker Engine 29+ -->
         <testcontainers.version>1.21.4</testcontainers.version>
-        <aws-sdk.version>2.57.13</aws-sdk.version>
+        <cloudinary.version>2.6.0</cloudinary.version>
     </properties>
-
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>software.amazon.awssdk</groupId>
-                <artifactId>bom</artifactId>
-                <version>${aws-sdk.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
 
     <dependencies>
         <!-- Web, data, validation, security -->
@@ -105,17 +93,11 @@
             <version>${springdoc.version}</version>
         </dependency>
 
-        <!-- File storage: S3 API (MinIO locally, R2/S3 in production) -->
+        <!-- File storage: Cloudinary (product images; later avatars, logos, documents) -->
         <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>s3</artifactId>
-            <exclusions>
-                <!-- only the sync client is used; keep the async Netty stack off the classpath -->
-                <exclusion>
-                    <groupId>software.amazon.awssdk</groupId>
-                    <artifactId>netty-nio-client</artifactId>
-                </exclusion>
-            </exclusions>
+            <groupId>com.cloudinary</groupId>
+            <artifactId>cloudinary-http5</artifactId>
+            <version>${cloudinary.version}</version>
         </dependency>
 
         <!-- Boilerplate & mapping -->
@@ -179,11 +161,6 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>minio</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
