@@ -258,7 +258,7 @@ passes; endpoints look right in Swagger.
 ## Done when
 
 - [x] Step 0 merged
-- [ ] Agent B merged
-- [ ] Agent A merged
-- [ ] Agent C merged
-- [ ] End-to-end test passes; `CLAUDE.md` "Current phase" → Phase 6 done
+- [x] Agent B merged
+- [x] Agent A merged
+- [x] Agent C merged
+- [x] End-to-end test passes (`PromotionEndToEndTest`); `CLAUDE.md` "Current phase" → Phase 6 done
