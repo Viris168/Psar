@@ -1,5 +1,6 @@
 package com.psar.catalog.repository;
 
+import com.psar.catalog.dto.response.CategoryReference;
 import com.psar.catalog.entity.Category;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
@@ -11,6 +12,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -48,4 +50,14 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
 
     @Query("select c.id from Category c where c.parent.id = :parentId")
     List<Long> findIdsByParentId(@Param("parentId") Long parentId);
+
+    @Query("""
+            select new com.psar.catalog.dto.response.CategoryReference(c.id, c.slug, c.name)
+            from Category c where c.slug in :slugs""")
+    List<CategoryReference> findReferencesBySlugIn(@Param("slugs") Collection<String> slugs);
+
+    @Query("""
+            select new com.psar.catalog.dto.response.CategoryReference(c.id, c.slug, c.name)
+            from Category c where c.id in :ids""")
+    List<CategoryReference> findReferencesByIdIn(@Param("ids") Collection<Long> ids);
 }

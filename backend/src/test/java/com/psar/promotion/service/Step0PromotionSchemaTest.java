@@ -7,9 +7,6 @@ import com.psar.catalog.service.ProductCatalogService;
 import com.psar.order.entity.Order;
 import com.psar.order.entity.OrderStatus;
 import com.psar.order.entity.PaymentMethod;
-import com.psar.order.service.pricing.PricingCalculator;
-import com.psar.order.service.pricing.PricingInput;
-import com.psar.order.service.pricing.PricingResult;
 import com.psar.promotion.dto.request.PromotionCartLine;
 import com.psar.promotion.dto.response.OfferSet;
 import com.psar.promotion.entity.DiscountLevel;
@@ -35,7 +32,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -66,9 +62,6 @@ class Step0PromotionSchemaTest extends IntegrationTest {
 
     @Autowired
     private ProductCatalogService productCatalogService;
-
-    @Autowired
-    private PricingCalculator pricingCalculator;
 
     @Autowired
     private PlatformTransactionManager transactionManager;
@@ -193,24 +186,12 @@ class Step0PromotionSchemaTest extends IntegrationTest {
         assertThat(sellable.get(inParent.getId()).parentCategoryId()).isNull();
     }
 
-    /** Until Agents B and C: no offers, prices exactly as in Phase 5. */
+    /** The entered code comes back normalised. (Offers: PromotionServiceTest; pricing: PricingCalculatorPromotionTest.) */
     @Test
-    void firstVersions_noOffers_pricingIgnoresOffers() {
+    void offersFor_couponCodeNormalised() {
         OfferSet offers = promotionService.offersFor(1L, List.of(new PromotionCartLine(1L, 2L, null)),
                 "  welcome5 ", Instant.now());
-        // the offers themselves are real since Agent C (PromotionServiceTest); the shared DB may hold automatic ones
         assertThat(offers.couponCode()).isEqualTo("WELCOME5");
-
-        PricingInput.Offer tenPercent = new PricingInput.Offer(1L, "10%", PricingInput.OfferType.PERCENTAGE,
-                PricingInput.OfferLevel.ITEM, new BigDecimal("10"), null, null, null, null, Set.of(1L), false,
-                Instant.now());
-        PricingResult result = pricingCalculator.price(new PricingInput(
-                List.of(new PricingInput.Line(1L, 2, new BigDecimal("5.00"))), new BigDecimal("1.00"),
-                List.of(tenPercent)));
-        assertThat(result.total()).isEqualByComparingTo("11.00");
-        assertThat(result.appliedOffers()).isEmpty();
-        assertThat(result.couponStatus()).isEqualTo(PricingResult.CouponStatus.NONE);
-        assertThat(result.lines().getFirst().appliedOfferId()).isNull();
     }
 
     private int claim(Promotion promotion) {

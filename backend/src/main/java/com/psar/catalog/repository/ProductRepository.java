@@ -1,5 +1,6 @@
 package com.psar.catalog.repository;
 
+import com.psar.catalog.dto.response.ProductReference;
 import com.psar.catalog.dto.response.ProductStockInfo;
 import com.psar.catalog.entity.Product;
 import org.springframework.data.domain.Page;
@@ -71,6 +72,18 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
 
         Boolean getMain();
     }
+
+    // ---- references for other modules (promotion targets) -----------------------------------
+
+    @Query("""
+            select new com.psar.catalog.dto.response.ProductReference(p.id, p.publicId, p.slug, p.name)
+            from Product p where p.publicId in :publicIds""")
+    List<ProductReference> findReferencesByPublicIdIn(@Param("publicIds") Collection<UUID> publicIds);
+
+    @Query("""
+            select new com.psar.catalog.dto.response.ProductReference(p.id, p.publicId, p.slug, p.name)
+            from Product p where p.id in :ids""")
+    List<ProductReference> findReferencesByIdIn(@Param("ids") Collection<Long> ids);
 
     // ---- stock (Step 0: used only by ProductStockService; don't change) ----------------------
 
