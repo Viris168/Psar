@@ -38,12 +38,16 @@ public enum ErrorCode {
     INSUFFICIENT_STOCK(HttpStatus.CONFLICT),
     /** e.g. receiving a purchase order that is already received or cancelled. */
     INVALID_STATUS(HttpStatus.CONFLICT),
+    /** A promotion's usage limit was reached while checking out (the whole checkout rolls back). */
+    PROMOTION_EXHAUSTED(HttpStatus.CONFLICT),
 
     // 413
     PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE),
 
     // 422
     BUSINESS_RULE(HttpStatus.UNPROCESSABLE_ENTITY),
+    /** Checkout with a coupon that can't be used (unknown, ended, used up, below its minimum, …). */
+    COUPON_INVALID(HttpStatus.UNPROCESSABLE_ENTITY),
 
     // 500
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR);

@@ -14,6 +14,7 @@ import com.psar.order.event.OrderStatusChangedEvent;
 import com.psar.order.repository.OrderRepository;
 import com.psar.order.repository.OrderStatusHistoryRepository;
 import com.psar.payment.service.PaymentService;
+import com.psar.promotion.service.PromotionUsageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -32,7 +33,8 @@ import java.util.stream.Collectors;
  * The one place an order's status changes after checkout (customer cancel, staff, expiry job; Phase 5 payments
  * later). Callers lock the order row first ({@link #lock}); {@link #move} then checks
  * {@link OrderStatus#canMoveTo}, writes the history row and publishes {@link OrderStatusChangedEvent}, and on
- * CANCELLED releases every item's stock and cancels the pending payment.
+ * CANCELLED releases every item's stock and cancels the pending payment. CANCELLED and REFUNDED both give the
+ * order's promotion uses back.
  */
 @Slf4j
 @Service
@@ -45,6 +47,7 @@ public class OrderWorkflow {
     private final OrderStatusHistoryRepository historyRepository;
     private final PaymentService paymentService;
     private final StockService stockService;
+    private final PromotionUsageService promotionUsageService;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
@@ -78,6 +81,9 @@ public class OrderWorkflow {
         order.setStatus(next);
         if (next == OrderStatus.CANCELLED) {
             releaseStockAndPayment(order, actorId);
+        }
+        if (next == OrderStatus.CANCELLED || next == OrderStatus.REFUNDED) {
+            promotionUsageService.release(order.getId());
         }
         orderRepository.save(order);
         historyRepository.save(OrderStatusHistory.of(order.getId(), next, actorId, cleanNote, now));

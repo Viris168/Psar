@@ -48,8 +48,10 @@ public class ProductCatalogService {
     }
 
     private static SellableProduct toSellable(Product product, String mainImageUrl) {
+        Category category = product.getCategory();
         return new SellableProduct(product.getId(), product.getPublicId(), product.getSlug(), product.getSku(),
                 product.getName(), product.getSellPrice(), product.getUnit(), mainImageUrl, product.getQuantity(),
+                category.getId(), category.getParent() == null ? null : category.getParent().getId(),
                 purchasable(product));
     }
 

@@ -19,7 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest(properties = "app.scheduling.enabled=false")
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, CatalogFixtures.class, SystemFixtures.class, OrderFixtures.class,
-        PaymentFixtures.class})
+        PaymentFixtures.class, PromotionFixtures.class})
 public abstract class IntegrationTest {
 
     @Autowired

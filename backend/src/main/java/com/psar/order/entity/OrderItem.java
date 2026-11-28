@@ -43,7 +43,7 @@ public class OrderItem {
     @Column(name = "quantity", nullable = false, updatable = false)
     private int quantity;
 
-    /** Buy X get Y (Phase 6); these units are also reserved from stock. */
+    /** Buy X get Y: how many of {@code quantity} are free (buy 2 get 1 = quantity 3, free 1). */
     @Column(name = "free_quantity", nullable = false, updatable = false)
     private int freeQuantity;
 
@@ -56,8 +56,8 @@ public class OrderItem {
     @Column(name = "line_total", nullable = false, precision = 12, scale = 2, updatable = false)
     private BigDecimal lineTotal;
 
-    /** Units that leave the shop: what checkout reserves and cancel releases. */
+    /** Units that leave the shop: what checkout reserves and cancel releases (free units are in quantity). */
     public int stockQuantity() {
-        return quantity + freeQuantity;
+        return quantity;
     }
 }

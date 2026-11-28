@@ -26,6 +26,8 @@ import com.psar.order.service.quote.PricedCart;
 import com.psar.payment.dto.response.CustomerPaymentResponse;
 import com.psar.payment.dto.response.PaymentView;
 import com.psar.payment.service.PaymentService;
+import com.psar.promotion.dto.request.UsedPromotion;
+import com.psar.promotion.service.PromotionUsageService;
 import com.psar.user.dto.response.AddressSnapshot;
 import com.psar.user.service.AddressLookupService;
 import org.springframework.beans.factory.annotation.Value;
@@ -57,6 +59,7 @@ public class CheckoutService {
     private final AddressLookupService addressLookupService;
     private final CheckoutQuoteService checkoutQuoteService;
     private final StockService stockService;
+    private final PromotionUsageService promotionUsageService;
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final Duration paymentTimeout;
@@ -65,7 +68,8 @@ public class CheckoutService {
     public CheckoutService(CartRepository cartRepository, OrderRepository orderRepository,
                            OrderStatusHistoryRepository historyRepository, PaymentService paymentService,
                            AddressLookupService addressLookupService, CheckoutQuoteService checkoutQuoteService,
-                           StockService stockService, ApplicationEventPublisher events, Clock clock,
+                           StockService stockService, PromotionUsageService promotionUsageService,
+                           ApplicationEventPublisher events, Clock clock,
                            @Value("${app.order.payment-timeout:PT15M}") Duration paymentTimeout) {
         this.cartRepository = cartRepository;
         this.orderRepository = orderRepository;
@@ -74,6 +78,7 @@ public class CheckoutService {
         this.addressLookupService = addressLookupService;
         this.checkoutQuoteService = checkoutQuoteService;
         this.stockService = stockService;
+        this.promotionUsageService = promotionUsageService;
         this.events = events;
         this.clock = clock;
         this.paymentTimeout = paymentTimeout;
@@ -90,10 +95,10 @@ public class CheckoutService {
                 .toList();
         AddressSnapshot address = addressLookupService.requireOwned(userId, request.addressPublicId());
 
-        // 2–4. current prices from the database, delivery rules and fee (422), pricing: the same code the quote
-        // uses, so what the customer was quoted is what they pay
-        PricedCart priced = checkoutQuoteService.price(
-                CheckoutQuoteService.quantities(cartItems), address, request.paymentMethod());
+        // 2–4. current prices from the database, delivery rules and fee (422), promotions, pricing: the same code
+        // the quote uses, so what the customer was quoted is what they pay
+        PricedCart priced = checkoutQuoteService.price(userId,
+                CheckoutQuoteService.quantities(cartItems), address, request.paymentMethod(), request.couponCode());
         Map<Long, SellableProduct> products = priced.products();
         DeliveryQuote quote = priced.delivery();
         PricingResult price = priced.pricing();
@@ -108,8 +113,10 @@ public class CheckoutService {
         order = orderRepository.saveAndFlush(order);
         historyRepository.save(OrderStatusHistory.of(order.getId(), order.getStatus(), userId, null, now));
 
-        // 6. reserve stock (409 INSUFFICIENT_STOCK rolls the whole checkout back)
+        // 6. reserve stock (409 INSUFFICIENT_STOCK rolls the whole checkout back), then take the promotions' uses
+        // (409 PROMOTION_EXHAUSTED rolls it back too) and snapshot them in order_promotions
         reserve(order, products, userId);
+        promotionUsageService.claim(order.getId(), userId, used(price));
 
         // 7. the payment, PENDING; KHQR gets its code here (generated locally, no network in this transaction)
         PaymentView payment = paymentService.createForOrder(order.getId(), order.getOrderNo(), request.paymentMethod().name(),
@@ -153,6 +160,12 @@ public class CheckoutService {
         order.setTotalAmount(price.total());
         order.setNote(StringUtils.hasText(request.note()) ? request.note().trim() : null);
         return order;
+    }
+
+    private static List<UsedPromotion> used(PricingResult price) {
+        return price.appliedOffers().stream()
+                .map(offer -> new UsedPromotion(offer.offerId(), offer.level().name(), offer.discountAmount()))
+                .toList();
     }
 
     private static OrderItem newItem(PricingResult.Line line, SellableProduct product) {

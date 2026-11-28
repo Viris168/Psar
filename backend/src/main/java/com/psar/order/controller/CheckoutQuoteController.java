@@ -26,12 +26,13 @@ public class CheckoutQuoteController {
 
     private final CheckoutQuoteService checkoutQuoteService;
 
-    @Operation(summary = "Quote my cart: lines, subtotal, delivery fee and total (422 if the address can't be "
-            + "delivered with this payment method)")
+    @Operation(summary = "Quote my cart: lines, subtotal, promotions, delivery fee and total (422 if the address "
+            + "can't be delivered with this payment method; a coupon that can't be used is explained, not an error)")
     @GetMapping("/quote")
     public CheckoutQuoteResponse quote(@AuthenticationPrincipal AuthenticatedUser me,
                                        @RequestParam UUID addressPublicId,
-                                       @RequestParam PaymentMethod paymentMethod) {
-        return checkoutQuoteService.quote(me.userId(), addressPublicId, paymentMethod);
+                                       @RequestParam PaymentMethod paymentMethod,
+                                       @RequestParam(required = false) String couponCode) {
+        return checkoutQuoteService.quote(me.userId(), addressPublicId, paymentMethod, couponCode);
     }
 }

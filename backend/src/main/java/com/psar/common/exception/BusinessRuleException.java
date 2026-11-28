@@ -12,4 +12,9 @@ public class BusinessRuleException extends ApiException {
     public BusinessRuleException(String message, Map<String, String> details) {
         super(ErrorCode.BUSINESS_RULE, message, details);
     }
+
+    /** A more specific 422 code, e.g. {@link ErrorCode#COUPON_INVALID}. */
+    public BusinessRuleException(ErrorCode errorCode, String message) {
+        super(errorCode, message);
+    }
 }

@@ -8,7 +8,10 @@ import java.util.UUID;
  * {@code id} is internal: the order module stores it, but it never appears in an API response.
  * {@code quantity} is for checks only; customers see {@code inStock}, never the number.
  *
- * @param purchasable the product, its category and the category's parent are all active
+ * @param categoryId       internal, for promotion targets
+ * @param parentCategoryId the category's parent (null for a top-level category), so a promotion on a top-level
+ *                         category also covers products in its subcategories
+ * @param purchasable      the product, its category and the category's parent are all active
  */
 public record SellableProduct(
         Long id,
@@ -20,6 +23,8 @@ public record SellableProduct(
         String unit,
         String mainImageUrl,
         int quantity,
+        Long categoryId,
+        Long parentCategoryId,
         boolean purchasable
 ) {
     public boolean inStock() {

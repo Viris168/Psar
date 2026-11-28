@@ -14,12 +14,17 @@ import com.psar.order.service.delivery.DeliveryQuoteService;
 import com.psar.order.service.pricing.PricingCalculator;
 import com.psar.order.service.pricing.PricingInput;
 import com.psar.order.service.pricing.PricingResult;
+import com.psar.promotion.dto.request.PromotionCartLine;
+import com.psar.promotion.dto.response.OfferSet;
+import com.psar.promotion.dto.response.PromotionOffer;
+import com.psar.promotion.service.PromotionService;
 import com.psar.user.dto.response.AddressSnapshot;
 import com.psar.user.service.AddressLookupService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +33,7 @@ import java.util.UUID;
 /**
  * What the current cart would cost, without placing an order. It runs the same steps as checkout
  * (architecture.md §5.1, steps 1–4): purchasable products with current DB prices, DeliveryQuoteService for the
- * delivery rules and fee, PricingCalculator for the totals. Checkout can call {@link #price} with its locked
+ * delivery rules and fee, PromotionService for the promotions that can apply, PricingCalculator for the totals. Checkout can call {@link #price} with its locked
  * cart's lines so the numbers always match.
  */
 @Service
@@ -40,22 +45,31 @@ public class CheckoutQuoteService {
     private final AddressLookupService addressLookupService;
     private final DeliveryQuoteService deliveryQuoteService;
     private final PricingCalculator pricingCalculator;
+    private final PromotionService promotionService;
+    private final Clock clock;
 
-    /** The quote for my cart: 404 for someone else's address, 422 for an empty cart or a delivery rule. */
+    /**
+     * The quote for my cart: 404 for someone else's address, 422 for an empty cart or a delivery rule.
+     *
+     * @param couponCode optional
+     */
     @Transactional(readOnly = true)
-    public CheckoutQuoteResponse quote(Long userId, UUID addressPublicId, PaymentMethod method) {
+    public CheckoutQuoteResponse quote(Long userId, UUID addressPublicId, PaymentMethod method, String couponCode) {
         Map<Long, Integer> quantities = quantities(
                 cartRepository.findByUserId(userId).map(Cart::getItems).orElse(List.of()));
         AddressSnapshot address = addressLookupService.requireOwned(userId, addressPublicId);
-        return toResponse(price(quantities, address, method));
+        return toResponse(price(userId, quantities, address, method, couponCode));
     }
 
     /**
-     * Prices cart lines (product id → quantity, in cart order) for an address and payment method.
-     * Empty → 422; a product that can't be bought any more → 422 naming it. Prices come from the database only.
+     * Prices cart lines (product id → quantity, in cart order) for this customer, an address, a payment method and
+     * an optional coupon. Empty → 422; a product that can't be bought any more → 422 naming it. Prices come from
+     * the database only. A coupon that can't be used is not an error here: {@link PricedCart#offers} and
+     * {@link PricingResult#couponStatus} say why, and the caller decides (quote: show it; checkout: 422).
      */
     @Transactional(readOnly = true)
-    public PricedCart price(Map<Long, Integer> quantities, AddressSnapshot address, PaymentMethod method) {
+    public PricedCart price(Long userId, Map<Long, Integer> quantities, AddressSnapshot address,
+                            PaymentMethod method, String couponCode) {
         if (quantities.isEmpty()) {
             throw new BusinessRuleException("Your cart is empty");
         }
@@ -70,8 +84,22 @@ public class CheckoutQuoteService {
         }).toList();
 
         DeliveryQuote delivery = deliveryQuoteService.quote(address, method);
-        PricingResult pricing = pricingCalculator.price(new PricingInput(lines, delivery.fee()));
-        return new PricedCart(address, method, delivery, products, pricing);
+        List<PromotionCartLine> promotionLines = lines.stream().map(line -> {
+            SellableProduct product = products.get(line.productId());
+            return new PromotionCartLine(product.id(), product.categoryId(), product.parentCategoryId());
+        }).toList();
+        OfferSet offers = promotionService.offersFor(userId, promotionLines, couponCode, clock.instant());
+        PricingResult pricing = pricingCalculator.price(new PricingInput(lines, delivery.fee(),
+                offers.offers().stream().map(CheckoutQuoteService::toPricing).toList()));
+        return new PricedCart(address, method, delivery, products, offers, pricing);
+    }
+
+    /** Promotion module record → pricing's own (enum names travel as strings between modules). */
+    private static PricingInput.Offer toPricing(PromotionOffer offer) {
+        return new PricingInput.Offer(offer.id(), offer.name(), PricingInput.OfferType.valueOf(offer.type()),
+                PricingInput.OfferLevel.valueOf(offer.level()), offer.value(), offer.maxDiscount(),
+                offer.buyQuantity(), offer.getQuantity(), offer.minOrderAmount(), offer.productIds(),
+                offer.isCoupon(), offer.endsAt());
     }
 
     private static CheckoutQuoteResponse toResponse(PricedCart cart) {

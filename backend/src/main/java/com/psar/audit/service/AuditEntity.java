@@ -13,6 +13,7 @@ public final class AuditEntity {
     public static final String STOCK_ADJUSTMENT = "STOCK_ADJUSTMENT";
     public static final String ORDER = "ORDER";
     public static final String PAYMENT = "PAYMENT";
+    public static final String PROMOTION = "PROMOTION";
 
     private AuditEntity() {
     }
