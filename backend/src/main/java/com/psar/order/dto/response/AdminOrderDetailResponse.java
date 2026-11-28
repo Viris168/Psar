@@ -1,5 +1,6 @@
 package com.psar.order.dto.response;
 
+import com.psar.promotion.dto.response.OrderPromotionView;
 import com.psar.user.dto.response.UserSummary;
 
 import java.time.Instant;
@@ -21,6 +22,7 @@ public record AdminOrderDetailResponse(
         Instant assignedAt,
         List<OrderItemResponse> items,
         OrderMoneyResponse money,
+        List<OrderPromotionView> promotions,
         OrderDeliveryResponse delivery,
         List<AdminOrderTimelineEntryResponse> timeline
 ) {

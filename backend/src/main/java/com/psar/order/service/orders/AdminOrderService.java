@@ -21,6 +21,7 @@ import com.psar.user.service.UserDirectoryService;
 import com.psar.user.service.UserLookupService;
 import com.psar.payment.dto.response.PaymentView;
 import com.psar.payment.service.PaymentService;
+import com.psar.promotion.service.PromotionUsageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -63,6 +64,7 @@ public class AdminOrderService {
     private final OrderWorkflow workflow;
     private final OrderTracking tracking;
     private final OrderMapper orderMapper;
+    private final PromotionUsageService promotionUsageService;
     private final UserLookupService userLookupService;
     private final UserDirectoryService userDirectoryService;
     private final AuditService auditService;
@@ -224,7 +226,8 @@ public class AdminOrderService {
         String paymentStatus = paymentService.findForOrder(order.getId())
                 .map(PaymentView::status).orElse(null);
         return orderMapper.toAdminDetail(order, paymentStatus, tracking.url(order), users.get(order.getUserId()),
-                order.getAssignedStaffId() == null ? null : users.get(order.getAssignedStaffId()), timeline);
+                order.getAssignedStaffId() == null ? null : users.get(order.getAssignedStaffId()), timeline,
+                promotionUsageService.forOrder(order.getId()));
     }
 
     private static Pageable safePage(Pageable pageable) {

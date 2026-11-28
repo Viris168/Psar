@@ -186,14 +186,12 @@ class Step0PromotionSchemaTest extends IntegrationTest {
         assertThat(sellable.get(inParent.getId()).parentCategoryId()).isNull();
     }
 
-    /** Until Agent C: no offers. (Pricing with offers: PricingCalculatorPromotionTest.) */
+    /** The entered code comes back normalised. (Offers: PromotionServiceTest; pricing: PricingCalculatorPromotionTest.) */
     @Test
-    void firstVersions_noOffers_offersForReturnsNone() {
+    void offersFor_couponCodeNormalised() {
         OfferSet offers = promotionService.offersFor(1L, List.of(new PromotionCartLine(1L, 2L, null)),
                 "  welcome5 ", Instant.now());
-        assertThat(offers.offers()).isEmpty();
         assertThat(offers.couponCode()).isEqualTo("WELCOME5");
-        assertThat(offers.coupon()).isEmpty();
     }
 
     private int claim(Promotion promotion) {

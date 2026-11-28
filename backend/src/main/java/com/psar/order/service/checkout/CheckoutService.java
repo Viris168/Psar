@@ -99,6 +99,7 @@ public class CheckoutService {
         // the quote uses, so what the customer was quoted is what they pay
         PricedCart priced = checkoutQuoteService.price(userId,
                 CheckoutQuoteService.quantities(cartItems), address, request.paymentMethod(), request.couponCode());
+        CheckoutQuoteService.requireCouponApplies(priced); // 422 COUPON_INVALID: never silently dropped
         Map<Long, SellableProduct> products = priced.products();
         DeliveryQuote quote = priced.delivery();
         PricingResult price = priced.pricing();
