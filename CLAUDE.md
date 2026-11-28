@@ -49,7 +49,8 @@ Swagger UI: `http://localhost:8080/swagger-ui.html` · RabbitMQ UI: `http://loca
 
 > Update this line as work progresses.
 
-**Phase 5 — Payments (KHQR, confirmation, refunds): done — MVP.** Next: Phase 6 (promotions). ABA PayWay / cards plug into `PaymentGateway` (own phase, needs a PayWay merchant account).
+**Phase 6 — Promotions & coupons: done.** Next: Phase 7 (points & reward vouchers — the third discount slot). ABA PayWay / cards plug into `PaymentGateway` (own phase, needs a PayWay merchant account).
+Phase 6 notes: members-only promotions are saved but never apply until Phase 8; the promotion broadcast is in-process until Phase 9 (RabbitMQ batches); integration tests deactivate every promotion after each test (`IntegrationTest`), so create the ones a test needs inside it.
 Open: delivery companies still expose the internal `id` (no `public_id` in V1); not yet tried against real accounts: Cloudinary uploads, Bakong (`BAKONG_MODE=bakong` + token) — tests use in-memory / fake stand-ins.
 
 Phases: 0 Setup → 1 Users → 2 Catalog & inventory → 3 Audit & notifications → 4 Orders & checkout → 5 Payments (MVP) → 6 Promotions → 7 Points → 8 Subscription → 9 RabbitMQ & jobs → 10 Dashboard → 11 AI chatbot → 12 Tests → 13 Launch.
