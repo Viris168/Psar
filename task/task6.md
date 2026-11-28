@@ -64,52 +64,92 @@ it gives more, and it still takes the order slot (one coupon per order).
 
 ---
 
-## Step 0 — shared contract (lead, on `main`)
+## Step 0 — shared contract ✅ done (on `main`)
 
-Every agent builds on these files and **must not change them**.
+Already built and tested. Every agent builds on these files and **must not change them**.
+
+**Things to know before you start:**
+- **Item offers list their products.** `PromotionOffer.productIds` / `PricingInput.Offer.productIds` hold exactly
+  the cart product ids an ITEM offer applies to: `offersFor` fills every cart line for `apply_to = ALL` and
+  resolves CATEGORIES (the category or its parent). There is **no "empty = all"**: an ITEM offer that matches no
+  line is not returned. ORDER offers have an empty set.
+- **The minimum order amount is checked by pricing, not by `offersFor`** (it depends on item discounts). ORDER
+  offers: subtotal after item discounts ≥ minimum; ITEM offers: subtotal before discounts ≥ minimum. Pricing
+  reports what happened to the coupon in `PricingResult.couponStatus`: `NONE` (no coupon offer), `APPLIED`,
+  `BELOW_MINIMUM`, `NOT_BETTER` (item coupon beats the automatic one on none of its lines). Agent C turns
+  `couponProblem` and these statuses into the quote's reason / checkout's 422.
+- **FREE_DELIVERY:** `PricingResult.deliveryFee` becomes 0, `orderDiscount` stays 0, and `appliedOffers` lists it
+  with the waived fee as its discount (that's what `order_promotions.discount_amount` stores).
+- **`PricingResult.Line.lineTotal` is before the discount** (unit price × quantity, as in Phase 4);
+  `discountAmount` holds the item discount, including buy X get Y's free units (`freeQuantity × unitPrice`).
+  `appliedOffers` has one entry per offer that took something off (an ITEM offer's lines summed).
+- **`used_count` is read-only in JPA** (`insertable = false, updatable = false`): only
+  `PromotionRepository.claimUse(id)` / `releaseUse(id)` change it, so saving a stale `Promotion` never
+  overwrites it. Reload to see the current value. These queries don't clear the persistence context (checkout
+  still holds its cart and order).
+- **Coupon codes:** `Promotion.setCouponCode` and `Promotion.normaliseCode` trim + upper-case (blank → null).
+  The DB enforces `^[A-Z0-9_-]{3,30}$` and UNIQUE. `OfferSet.couponCode` is the normalised entered code.
+- **Wiring done in Step 0:** `CheckoutQuoteService.price(userId, quantities, address, method, couponCode)` calls
+  `offersFor` and maps the offers into `PricingInput` (`PricedCart.offers()` keeps the `OfferSet`); the quote
+  endpoint takes `?couponCode=`; `CheckoutRequest.couponCode` (max 30); checkout calls
+  `PromotionUsageService.claim(orderId, userId, List<UsedPromotion>)` right after reserving stock;
+  `OrderWorkflow.move` calls `release(orderId)` on CANCELLED **and** REFUNDED (customer / staff cancel, expiry,
+  refund all go through it). `PromotionUsageService.forOrder(orderId)` → `List<OrderPromotionView>` already works.
+- **Not wired yet (Agent C):** checkout throwing 422 `COUPON_INVALID` (`new BusinessRuleException(ErrorCode.
+  COUPON_INVALID, message)`), the quote response's coupon section, order detail promotions.
+- **Repositories:** agents may **add** query methods to `PromotionRepository` / `OrderPromotionRepository`;
+  don't change the existing ones. `findWithTargetsById` loads targets (they're lazy).
+- **Fixtures:** `PromotionFixtures` (bean in every `IntegrationTest`): `percentageOnProducts`,
+  `percentageOnCategory`, `percentageOnAll`, `fixedOnProducts`, `buyXGetY`, `orderPercentage(percent, min)`,
+  `freeDelivery(min)`, `coupon(code, amount, min, usageLimit, perUserLimit)`, `uniqueCode(prefix)`,
+  `save(type, applyTo, customize)` for anything else, `reload`, `usedCount`, `setUsedCount`, `orderPromotions`.
+  Defaults: active, started 1 h ago (test clock), ends in 30 days.
 
 ### 1. `V6__promotions.sql`
 - `promotions`: `id`, `public_id`, `name`, `description`, `banner_url`, `type` (`PERCENTAGE`/`FIXED_AMOUNT`/
-  `BUY_X_GET_Y`/`FREE_DELIVERY`), `discount_value` NUMERIC NULL, `max_discount` NULL, `buy_quantity` NULL,
-  `get_quantity` NULL, `apply_to` (`ALL`/`PRODUCTS`/`CATEGORIES`/`ORDER`), `min_order_amount` NULL,
-  `coupon_code` UNIQUE NULL (stored upper-case; null = automatic), `members_only`, `usage_limit` NULL,
-  `per_user_limit` NULL, `used_count` INT default 0 CHECK `used_count >= 0` and `<= usage_limit`, `start_date`,
-  `end_date`, `is_active`, `broadcast_at` NULL, `created_by` → users, timestamps. CHECKs per type (e.g.
-  BUY_X_GET_Y needs both quantities; FREE_DELIVERY only with `apply_to = ORDER`; `end_date > start_date`).
-  Index `(is_active, start_date, end_date)`.
-- `promotion_targets`: `promotion_id` → promotions ON DELETE CASCADE, `product_id` NULL, `category_id` NULL —
-  exactly one (CHECK); UNIQUE per target.
-- `order_promotions`: `order_id`, `promotion_id`, `promotion_name` (snapshot), `coupon_code` NULL, `scope`
-  (`ITEM`/`ORDER`), `discount_amount`, `user_id`, `released_at` NULL (usage given back on cancel), `created_at`.
-  Index `(promotion_id, user_id)` for per-user limits.
+  `BUY_X_GET_Y`/`FREE_DELIVERY`), `discount_value` NULL, `max_discount` NULL, `buy_quantity` / `get_quantity` NULL
+  (only for BUY_X_GET_Y), `apply_to` (`ALL`/`PRODUCTS`/`CATEGORIES`/`ORDER`), `min_order_amount` NULL,
+  `coupon_code` UNIQUE NULL, `members_only`, `usage_limit` NULL, `per_user_limit` NULL, `used_count` (CHECK
+  `>= 0` and `<= usage_limit`), `start_date`, `end_date`, `is_active`, **`broadcast_on_start`** (for
+  `PromotionLaunchJob`), `broadcast_at` NULL, `created_by` → users, timestamps. CHECKs: percentage 0–100, fixed > 0,
+  value required except BXGY / free delivery, BXGY needs X ≥ 1 and Y ≥ 1 and not ORDER, FREE_DELIVERY only
+  ORDER, `max_discount > 0`, limits ≥ 1, `end_date > start_date`. Index `(is_active, start_date, end_date)`.
+  Agent A: lowering `usage_limit` below `used_count` fails the CHECK, so validate it (422) first.
+- `promotion_targets`: `promotion_id` → promotions ON DELETE CASCADE, `product_id` | `category_id` (exactly one),
+  UNIQUE per target.
+- `order_promotions`: `order_id`, `promotion_id`, `promotion_name`, `coupon_code`, **`level`** (`ITEM`/`ORDER`),
+  `discount_amount`, `user_id`, `released_at`, `created_at`; UNIQUE `(order_id, promotion_id)`; partial index
+  `(promotion_id, user_id) WHERE released_at IS NULL` for per-user limits.
+- `order_items`: CHECK `free_quantity <= quantity`.
 
-### 2. Entities + enums (promotion module) and two contract changes elsewhere
-- `Promotion`, `PromotionTarget`, `OrderPromotion`, `PromotionType`, `PromotionScope` (`apply_to`).
-- `SellableProduct` gains `categoryId` and `parentCategoryId` (to match CATEGORIES targets, incl. subcategories).
-- `OrderItem.free_quantity` means **free units included in `quantity`** (buy 2 get 1 = quantity 3, free 1), so
-  `stockQuantity()` = `quantity`. (Phase 4 assumed extra units; nothing used it yet.)
-- `CheckoutRequest` and the quote take an optional `couponCode`.
+### 2. Entities + enums (`promotion.entity`) and contract changes elsewhere
+- `Promotion` (with `targets`, `addProductTarget`, `addCategoryTarget`, `isRunningAt(now)`, `isCoupon()`),
+  `PromotionTarget`, `OrderPromotion` (`of(...)` snapshot), `PromotionType`, `PromotionScope` (`apply_to`,
+  `isItemLevel()`), `DiscountLevel` (`ITEM`/`ORDER`).
+- `SellableProduct` gains `categoryId` and `parentCategoryId`.
+- `OrderItem.stockQuantity()` = `quantity` (free units are part of it).
+- `CheckoutRequest.couponCode`, quote `?couponCode=`.
 
 ### 3. Contracts
-- **Pricing (pure, Agent B)** — `PricingInput` gains `List<PricingInput.Offer> offers` (id, name, type, scope,
-  value, maxDiscount, buy, get, minOrderAmount, `productIds` it applies to (empty = all), `coupon` flag,
-  `endsAt`) and `isCouponEntered`; `PricingResult` gains per line `appliedOfferId`, and `appliedOffers` (id, scope,
-  discount). Step 0 version: ignores offers (same results as today).
-- **Eligibility (Agent C)** — `PromotionService.offersFor(userId, List<CartLine(productId, categoryId,
-  parentCategoryId)>, String couponCode, Instant now)` → `OfferSet(offers, couponProblem)`: active, in date,
-  usage left, per-user limit left, members-only skipped (Phase 8), coupon looked up case-insensitively.
-  Step 0 version: no offers.
-- **Usage (Agent C)** — `PromotionUsageService.claim(orderId, userId, appliedOffers)` inside checkout:
-  `UPDATE promotions SET used_count = used_count + 1 WHERE id = :id AND (usage_limit IS NULL OR used_count <
-  usage_limit)` (0 rows → 409 `PROMOTION_EXHAUSTED`, whole checkout rolls back) + `order_promotions` rows;
-  `release(orderId)` on cancel / expiry / refund (sets `released_at`, gives the use back once).
-  Step 0 version: no-ops. Order workflow and checkout already call them.
-- New `ErrorCode.PROMOTION_EXHAUSTED` (409) and `COUPON_INVALID` (422); `NotificationType.PROMOTION`;
-  `AuditEntity.PROMOTION`.
+- **Pricing** (`order.service.pricing`, Agent B fills `PricingCalculator.price`):
+  `PricingInput(lines, deliveryFee, List<Offer> offers)` (2-arg constructor = no offers; at most one coupon offer);
+  `Offer(id, name, OfferType, OfferLevel, value, maxDiscount, buyQuantity, getQuantity, minOrderAmount,
+  Set<Long> productIds, boolean coupon, Instant endsAt)`. `PricingResult` gains `appliedOffers`
+  (`AppliedOffer(offerId, level, discountAmount)`) and `couponStatus`; `Line` gains `appliedOfferId`.
+  Step 0 version: ignores offers.
+- **Eligibility** (`promotion.service.PromotionService`, Agent C):
+  `offersFor(userId, List<PromotionCartLine(productId, categoryId, parentCategoryId)>, couponCode, now)` →
+  `OfferSet(List<PromotionOffer> offers, couponCode, couponProblem)`. `PromotionOffer` carries enum values as
+  names (`type`, `level` = "ITEM"/"ORDER"), `couponCode` null for automatic. Step 0 version: no offers.
+- **Usage** (`promotion.service.PromotionUsageService`, Agent C): `claim(orderId, userId,
+  List<UsedPromotion(promotionId, level, discountAmount)>)` — `claimUse` per promotion (0 rows → 409
+  `PROMOTION_EXHAUSTED`) + `order_promotions` rows; `release(orderId)` — once per row (`released_at`) +
+  `releaseUse`. Both `Propagation.MANDATORY`. Step 0 versions: no-ops.
+- `ErrorCode.PROMOTION_EXHAUSTED` (409), `ErrorCode.COUPON_INVALID` (422) + `BusinessRuleException(ErrorCode,
+  String)`; `NotificationType.PROMOTION`; `AuditEntity.PROMOTION`.
 
 ### 4. Test support
-`PromotionFixtures` (automatic % / fixed / BXGY / free delivery, a coupon, with targets and limits) and
-`Step0PromotionSchemaTest`.
+`PromotionFixtures` (see above) and `promotion/service/Step0PromotionSchemaTest`.
 
 ---
 
@@ -217,7 +257,7 @@ passes; endpoints look right in Swagger.
 
 ## Done when
 
-- [ ] Step 0 merged
+- [x] Step 0 merged
 - [ ] Agent B merged
 - [ ] Agent A merged
 - [ ] Agent C merged
