@@ -13,6 +13,7 @@ import com.psar.order.repository.OrderRepository;
 import com.psar.order.repository.OrderStatusHistoryRepository;
 import com.psar.payment.dto.response.PaymentView;
 import com.psar.payment.service.PaymentService;
+import com.psar.promotion.service.PromotionUsageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -40,6 +41,7 @@ public class OrderService {
     private final OrderWorkflow workflow;
     private final OrderTracking tracking;
     private final OrderMapper orderMapper;
+    private final PromotionUsageService promotionUsageService;
 
     /** My orders, newest first, optionally of one status. */
     @Transactional(readOnly = true)
@@ -89,6 +91,7 @@ public class OrderService {
         String paymentStatus = paymentService.findForOrder(order.getId())
                 .map(PaymentView::status).orElse(null);
         return orderMapper.toDetail(order, paymentStatus, tracking.url(order),
-                historyRepository.findAllByOrderIdOrderByIdAsc(order.getId()));
+                historyRepository.findAllByOrderIdOrderByIdAsc(order.getId()),
+                promotionUsageService.forOrder(order.getId()));
     }
 }

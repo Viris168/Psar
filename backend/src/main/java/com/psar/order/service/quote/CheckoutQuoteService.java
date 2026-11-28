@@ -3,6 +3,7 @@ package com.psar.order.service.quote;
 import com.psar.catalog.dto.response.SellableProduct;
 import com.psar.catalog.service.ProductCatalogService;
 import com.psar.common.exception.BusinessRuleException;
+import com.psar.common.exception.ErrorCode;
 import com.psar.order.dto.response.CheckoutQuoteResponse;
 import com.psar.order.entity.Cart;
 import com.psar.order.entity.CartItem;
@@ -29,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * What the current cart would cost, without placing an order. It runs the same steps as checkout
@@ -102,19 +104,67 @@ public class CheckoutQuoteService {
                 offer.isCoupon(), offer.endsAt());
     }
 
+    /**
+     * Why the entered coupon is not used in this priced cart, for the customer: the eligibility problem
+     * (unknown, expired, used up, …) or what pricing found (below the minimum, no better than the automatic
+     * promotion). Null if no code was entered or it applies.
+     */
+    public static String couponProblem(PricedCart cart) {
+        OfferSet offers = cart.offers();
+        String code = offers.couponCode();
+        if (code == null) {
+            return null;
+        }
+        if (offers.couponProblem() != null) {
+            return offers.couponProblem();
+        }
+        PromotionOffer coupon = offers.coupon().orElse(null);
+        PricingResult.CouponStatus status = cart.pricing().couponStatus();
+        if (coupon == null || status == PricingResult.CouponStatus.NONE) {
+            return "Coupon " + code + " can't be used on this order";
+        }
+        return switch (status) {
+            case APPLIED -> null;
+            case BELOW_MINIMUM -> "Coupon " + code + " needs an order of at least $"
+                    + PricingCalculator.money(coupon.minOrderAmount()).toPlainString();
+            case NOT_BETTER -> "Coupon " + code + " gives no more off the products in your cart than their "
+                    + "current promotion";
+            case NONE -> throw new IllegalStateException("handled above");
+        };
+    }
+
+    /** Checkout: an entered coupon that doesn't apply is never silently dropped → 422 COUPON_INVALID. */
+    public static void requireCouponApplies(PricedCart cart) {
+        String problem = couponProblem(cart);
+        if (problem != null) {
+            throw new BusinessRuleException(ErrorCode.COUPON_INVALID, problem);
+        }
+    }
+
     private static CheckoutQuoteResponse toResponse(PricedCart cart) {
         PricingResult pricing = cart.pricing();
+        Map<Long, String> names = cart.offers().offers().stream()
+                .collect(Collectors.toMap(PromotionOffer::id, PromotionOffer::name, (a, b) -> a));
         List<CheckoutQuoteResponse.Line> lines = pricing.lines().stream().map(line -> {
             SellableProduct product = cart.products().get(line.productId());
             return new CheckoutQuoteResponse.Line(product.publicId(), product.slug(), product.name(),
-                    product.unit(), product.mainImageUrl(), line.quantity(), line.unitPrice(),
-                    line.discountAmount(), line.lineTotal());
+                    product.unit(), product.mainImageUrl(), line.quantity(), line.freeQuantity(), line.unitPrice(),
+                    line.discountAmount(), line.lineTotal(),
+                    line.appliedOfferId() == null ? null : names.get(line.appliedOfferId()));
         }).toList();
+        List<CheckoutQuoteResponse.AppliedPromotion> promotions = pricing.appliedOffers().stream()
+                .map(applied -> new CheckoutQuoteResponse.AppliedPromotion(names.get(applied.offerId()),
+                        applied.level().name(), applied.discountAmount()))
+                .toList();
+        String code = cart.offers().couponCode();
+        String problem = couponProblem(cart);
+        CheckoutQuoteResponse.Coupon coupon = code == null ? null
+                : new CheckoutQuoteResponse.Coupon(code, problem == null, problem);
         return new CheckoutQuoteResponse(lines, pricing.subtotal(), pricing.productDiscount(),
                 pricing.orderDiscount(), pricing.rewardDiscount(), pricing.deliveryFee(), pricing.total(),
                 DeliveryType.valueOf(cart.address().deliveryType()),
                 cart.delivery().company() == null ? null : cart.delivery().company().name(),
-                cart.paymentMethod());
+                cart.paymentMethod(), promotions, coupon);
     }
 
     /** Cart item quantities in cart order (for callers that already hold the cart, e.g. checkout). */

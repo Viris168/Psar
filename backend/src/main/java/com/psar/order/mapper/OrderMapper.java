@@ -13,6 +13,7 @@ import com.psar.order.dto.response.OrderTimelineEntryResponse;
 import com.psar.order.entity.Order;
 import com.psar.order.entity.OrderItem;
 import com.psar.order.entity.OrderStatusHistory;
+import com.psar.promotion.dto.response.OrderPromotionView;
 import com.psar.user.dto.response.UserSummary;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -55,19 +56,20 @@ public interface OrderMapper {
     AdminOrderListItemResponse toAdminListItem(Order order, UserSummary assignedDriver);
 
     default OrderDetailResponse toDetail(Order order, String paymentStatus, String trackingUrl,
-                                         List<OrderStatusHistory> history) {
+                                         List<OrderStatusHistory> history, List<OrderPromotionView> promotions) {
         return new OrderDetailResponse(order.getPublicId(), order.getOrderNo(), order.getStatus().name(),
                 order.getPaymentMethod().name(), paymentStatus, order.getExpiresAt(), order.getNote(),
-                order.getCreatedAt(), toItems(order.getItems()), toMoney(order), toDelivery(order, trackingUrl),
-                toTimeline(history));
+                order.getCreatedAt(), toItems(order.getItems()), toMoney(order), promotions,
+                toDelivery(order, trackingUrl), toTimeline(history));
     }
 
     default AdminOrderDetailResponse toAdminDetail(Order order, String paymentStatus, String trackingUrl,
                                                    UserSummary customer, UserSummary assignedDriver,
-                                                   List<AdminOrderTimelineEntryResponse> timeline) {
+                                                   List<AdminOrderTimelineEntryResponse> timeline,
+                                                   List<OrderPromotionView> promotions) {
         return new AdminOrderDetailResponse(order.getPublicId(), order.getOrderNo(), order.getStatus().name(),
                 order.getPaymentMethod().name(), paymentStatus, order.getExpiresAt(), order.getNote(),
                 order.getCreatedAt(), customer, assignedDriver, order.getAssignedAt(), toItems(order.getItems()),
-                toMoney(order), toDelivery(order, trackingUrl), timeline);
+                toMoney(order), promotions, toDelivery(order, trackingUrl), timeline);
     }
 }

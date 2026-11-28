@@ -198,9 +198,8 @@ class Step0PromotionSchemaTest extends IntegrationTest {
     void firstVersions_noOffers_pricingIgnoresOffers() {
         OfferSet offers = promotionService.offersFor(1L, List.of(new PromotionCartLine(1L, 2L, null)),
                 "  welcome5 ", Instant.now());
-        assertThat(offers.offers()).isEmpty();
+        // the offers themselves are real since Agent C (PromotionServiceTest); the shared DB may hold automatic ones
         assertThat(offers.couponCode()).isEqualTo("WELCOME5");
-        assertThat(offers.coupon()).isEmpty();
 
         PricingInput.Offer tenPercent = new PricingInput.Offer(1L, "10%", PricingInput.OfferType.PERCENTAGE,
                 PricingInput.OfferLevel.ITEM, new BigDecimal("10"), null, null, null, null, Set.of(1L), false,

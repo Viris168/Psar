@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -22,6 +24,19 @@ public interface PromotionRepository extends JpaRepository<Promotion, Long>, Jpa
     Optional<Promotion> findByCouponCode(String code);
 
     boolean existsByCouponCode(String code);
+
+    /**
+     * Automatic (no coupon code), active, in their dates at {@code now} (start inclusive, end exclusive), not
+     * members-only and with uses left, with their targets loaded. For checkout eligibility.
+     */
+    @EntityGraph(attributePaths = "targets")
+    @Query("""
+            SELECT DISTINCT p FROM Promotion p
+            WHERE p.couponCode IS NULL AND p.active = true AND p.membersOnly = false
+              AND p.startDate <= :now AND p.endDate > :now
+              AND (p.usageLimit IS NULL OR p.usedCount < p.usageLimit)
+            """)
+    List<Promotion> findRunningAutomatic(@Param("now") Instant now);
 
     /**
      * Takes one use if any are left (like the stock update): 1 = claimed, 0 = used up. The only way
