@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -15,6 +16,8 @@ import org.springframework.test.web.servlet.MockMvc;
  * per-class @MockitoBean / @TestPropertySource (each variation starts a new context).
  * <p>
  * Tests don't roll back: create your own data with unique emails, don't assume an empty table.
+ * Exception: every promotion is deactivated after each test, because an automatic shop-wide one (ALL products,
+ * free delivery, …) would otherwise change the prices of every later checkout test.
  */
 @SpringBootTest(properties = "app.scheduling.enabled=false")
 @AutoConfigureMockMvc
@@ -32,9 +35,17 @@ public abstract class IntegrationTest {
     @Autowired
     protected TestClock clock;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     @AfterEach
     void resetClock() {
         clock.reset();
+    }
+
+    @AfterEach
+    void deactivatePromotions() {
+        jdbcTemplate.update("update promotions set is_active = false where is_active");
     }
 
     protected String json(Object body) throws Exception {
